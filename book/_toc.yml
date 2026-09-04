@@ -1,0 +1,20 @@
+format: jb-book
+root: intro
+parts:
+  - caption: Foundations
+    chapters:
+      - file: notebooks/01_periodic_orbits
+      - file: notebooks/02_surfaces_of_section
+      - file: notebooks/03_orbit_taxonomy_energy_bands
+  - caption: Resonances & chaos
+    chapters:
+      - file: notebooks/04_resonances_slow_vs_fast_bars
+      - file: notebooks/05_chaos_and_diffusion
+  - caption: Going 3D and time-dependent
+    chapters:
+      - file: notebooks/06_3d_orbits_buckling
+      - file: notebooks/07_time_dependent_bar
+  - caption: Streams
+    chapters:
+      - file: notebooks/08_streams_in_bars
+      - file: notebooks/09_cutting_edge_case_studies

@@ -1,0 +1,15 @@
+name: bar-dynamics
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - numpy
+  - scipy
+  - matplotlib
+  - astropy
+  - jupyterlab
+  - jupyter-book
+  - ffmpeg
+  - pip
+  - pip:
+      - galpy

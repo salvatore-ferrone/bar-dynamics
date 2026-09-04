@@ -1,0 +1,26 @@
+title: Bar Dynamics — A Pedagogical Primer
+author: Salvatore Ferrone
+logo: ""
+
+execute:
+  execute_notebooks: cache
+
+latex:
+  latex_documents:
+    targetname: book.tex
+
+repository:
+  url: https://github.com/YOUR_GH_USERNAME/bar-dynamics
+  path_to_book: book
+  branch: main
+
+html:
+  use_issues_button: true
+  use_repository_button: true
+
+sphinx:
+  config:
+    mathjax3_config:
+      tex:
+        macros:
+          Ej: "E_j"

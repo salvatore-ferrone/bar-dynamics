@@ -1,0 +1,6 @@
+jupyter-book==1.*
+numpy
+scipy
+matplotlib
+astropy
+galpy

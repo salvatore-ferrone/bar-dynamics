@@ -14,21 +14,22 @@ The initial experiment uses four folders:
 
 - `parameters/`: Pal 5 phase-space data and the INI configuration for the Milky Way model and sweep.
 - `experiments/`: Agama simulation drivers.
-- `simulations/`: one HDF5 file per run, including phase-space arrays, metadata, and snapshots of both input files.
+- `simulations/`: one merged HDF5 file per experiment, with one group per run.
 - `analysis/` and `plots/`: analysis scripts and quick-look figures.
 
 Run the 71 clockwise bar speeds from 25 to 60 km/s/kpc, plus the matched axisymmetric control, with:
 
 ```bash
-python experiments/simple_example.py
+python experiments/bar_pattern_speed_sweep.py
 ```
 
 The INI stores positive pattern-speed magnitudes; clockwise Agama pattern speeds are signed negative. The control retains the azimuthally averaged (`m=0`) contribution of the same Ferrers bar while keeping the disk and halo unchanged and static.
 
-Create the morphology overlay with:
+Each run is first written to its own temporary HDF5 file (independent, so future runs can be parallelized safely), then all runs are merged into a single packaged HDF5 file under `simulations/`, and the temp files are deleted. The merged file stores shared metadata (config, initial conditions, units, software versions) at the top level, plus one group per run under `runs/<run_key>` containing that run's progenitor orbit (`progenitor_orbit_phase_space`) and final stream (`stream_phase_space`).
+
+Create the quick-look overlay and the per-speed figures with:
 
 ```bash
 python analysis/quicklook.py
+python analysis/pattern_speed_sweep.py
 ```
-
-Output names encode the stream, Milky Way model ID, lookback time, particle count, random seed, and input snapshot hash; barred runs also encode the bar ID and pattern speed. Each HDF5 file contains `stream/phase_space`, progenitor and spray data, units, software metadata, and the complete text inputs used for that run.

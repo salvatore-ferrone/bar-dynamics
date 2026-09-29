@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate a Palomar 5 particle-spray stream across a sweep of bar pattern speeds.
+"""Generate a globular-cluster particle-spray stream across a sweep of bar pattern speeds.
 
 Each run (the axisymmetric control plus one per pattern speed) is written to its
 own temporary HDF5 file, so runs stay independent (safe for future parallel
@@ -63,7 +63,7 @@ def make_potential(config):
 	return tidal_potential, axisymmetric, bar, bar_angle
 
 
-def pal5_galactocentric_state(initial_conditions_path):
+def progenitor_galactocentric_state(initial_conditions_path):
 	ra, dec, distance, pmra, pmdec, radial_velocity = np.loadtxt(
 		initial_conditions_path, delimiter=",", comments="#", ndmin=2
 	)[0]
@@ -160,7 +160,7 @@ def merge_runs(temp_paths, output_path, config, config_text, initial_conditions_
 	with h5py.File(output_path, "w") as output:
 		output.attrs["schema_version"] = "2.0"
 		output.attrs["experiment_id"] = config.get("experiment", "name")
-		output.attrs["stream_id"] = "pal5"
+		output.attrs["stream_id"] = config.get("cluster", "stream_id")
 		output.attrs["milky_way_model_id"] = config.get("milky_way", "model_id")
 		output.attrs["bar_model_id"] = config.get("bar", "model_id")
 		output.attrs["rotation_direction"] = config.get("experiment", "rotation_direction")
@@ -234,7 +234,7 @@ def main():
 
 	agama.setUnits(length=1, velocity=1, mass=1)
 	tidal_potential, background, bar, bar_angle = make_potential(config)
-	progenitor_now = pal5_galactocentric_state(args.initial_conditions)
+	progenitor_now = progenitor_galactocentric_state(args.initial_conditions)
 
 	name = config.get("experiment", "name")
 	model_id = config.get("milky_way", "model_id")

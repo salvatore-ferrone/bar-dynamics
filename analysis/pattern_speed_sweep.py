@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Save one Palomar 5 y-z figure for each barred pattern-speed run."""
+"""Save one Galactocentric y-z figure for each barred pattern-speed run."""
 
 import argparse
 from pathlib import Path
@@ -13,14 +13,13 @@ import plot_types
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_PLOT_DIR = ROOT / "plots" / "pal5_bar_pattern_speed_v1"
 
 GENERAL_AXIS = {"aspect": "equal"}
 SPEED_MIN, SPEED_MAX = 25.0, 60.0
 CMAP = plt.get_cmap("rainbow")
 NORM = Normalize(vmin=SPEED_MIN, vmax=SPEED_MAX)
 
-# Pal 5 is shown in Galactocentric y-z coordinates for this plot type.
+# Per-stream presentation settings for this plot type (Galactocentric y-z).
 PAL5 = {
     "stream_id": "pal5",
     "x_column": 1,
@@ -33,6 +32,20 @@ PAL5 = {
     },
 }
 
+NGC4590 = {
+    "stream_id": "ngc4590",
+    "x_column": 1,
+    "y_column": 2,
+    "xlim": (-24.0, 22.0),
+    "ylim": (-16.0, 10.0),
+    "axis": {
+        "xlabel": r"Galactocentric $y$ [$\rm{kpc}$]",
+        "ylabel": r"Galactocentric $z$ [$\rm{kpc}$]",
+    },
+}
+
+STREAMS = {"pal5": PAL5, "ngc4590": NGC4590}
+
 
 def _text_attribute(value):
     return value.decode() if isinstance(value, bytes) else str(value)
@@ -40,15 +53,22 @@ def _text_attribute(value):
 
 def find_default_simulation_file(stream_id):
     """Locate the most recently written merged experiment file for this stream."""
-    candidates = sorted(
-        (ROOT / "simulations").glob(f"{stream_id}_bar_pattern_speed_*.h5"),
-        key=lambda path: path.stat().st_mtime,
-    )
+    candidates = [
+        path for path in sorted(
+            (ROOT / "simulations").glob("*.h5"), key=lambda path: path.stat().st_mtime
+        )
+        if _file_stream_id(path) == stream_id
+    ]
     if not candidates:
         raise FileNotFoundError(
-            f"No merged experiment HDF5 files found in {ROOT / 'simulations'}"
+            f"No merged experiment HDF5 files with stream_id={stream_id!r} found in {ROOT / 'simulations'}"
         )
     return candidates[-1]
+
+
+def _file_stream_id(path):
+    with h5py.File(path, "r") as simulation:
+        return _text_attribute(simulation.attrs.get("stream_id", ""))
 
 
 def load_barred_runs(simulation_file, stream_id):
@@ -68,7 +88,7 @@ def load_barred_runs(simulation_file, stream_id):
 
 
 def plot_run(run_key, speed, phase_space, settings, output_dir):
-    """Render and save one simulation using the Pal 5 sweep presentation."""
+    """Render and save one simulation using the selected stream's presentation."""
     fig, axis, color_axis = plot_types.flush_color_bar_single_column(
         settings["xlim"], settings["ylim"]
     )
@@ -121,8 +141,9 @@ def sweep_pattern_speeds(simulation_file, output_dir, stream_settings, limit=Non
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--stream", choices=sorted(STREAMS), default="pal5")
     parser.add_argument("--simulation-file", type=Path, default=None)
-    parser.add_argument("--plot-dir", type=Path, default=DEFAULT_PLOT_DIR)
+    parser.add_argument("--plot-dir", type=Path, default=None)
     parser.add_argument("--limit", type=int, help="only render the first N speeds (for testing)")
     parser.add_argument(
         "--usetex",
@@ -134,19 +155,21 @@ def main():
     if not args.usetex:
         plt.rcParams.update({"text.usetex": False, "mathtext.fontset": "stix"})
 
-    simulation_file = args.simulation_file or find_default_simulation_file(PAL5["stream_id"])
+    stream_settings = STREAMS[args.stream]
+    simulation_file = args.simulation_file or find_default_simulation_file(stream_settings["stream_id"])
     if not simulation_file.is_file():
         parser.error(f"Simulation file does not exist: {simulation_file}")
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
 
+    plot_dir = args.plot_dir or ROOT / "plots" / f"{args.stream}_bar_pattern_speed_v1"
     outputs = sweep_pattern_speeds(
         simulation_file,
-        args.plot_dir,
-        PAL5,
+        plot_dir,
+        stream_settings,
         limit=args.limit,
     )
-    print(f"Saved {len(outputs)} figures to {args.plot_dir}")
+    print(f"Saved {len(outputs)} figures to {plot_dir}")
 
 
 if __name__ == "__main__":

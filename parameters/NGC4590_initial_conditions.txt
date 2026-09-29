@@ -1,0 +1,3 @@
+#  GC4590
+# Columns: ra_deg,dec_deg,distance_kpc,pm_ra_masyr,pm_dec_masyr,radial_velocity_kms
+189.866577,-26.744057,10.4,-2.732,1.764,-93.11

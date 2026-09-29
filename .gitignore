@@ -6,3 +6,4 @@ book/_build/
 .jupyter_cache/
 /plots/*.png
 .vscode
+/simulations/**/*.h5

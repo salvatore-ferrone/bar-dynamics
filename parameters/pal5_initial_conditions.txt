@@ -1,0 +1,3 @@
+# Pal 5 fiducial phase-space values used by Agama's tutorial_streams.ipynb (same example as Gala).
+# Columns: ra_deg,dec_deg,distance_kpc,pm_ra_masyr,pm_dec_masyr,radial_velocity_kms
+229.0,-0.124,22.9,-2.296,-2.257,-58.7

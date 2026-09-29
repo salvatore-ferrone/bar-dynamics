@@ -5,3 +5,4 @@ matplotlib
 astropy
 galpy
 agama
+h5py

@@ -57,7 +57,20 @@ NGC3201 = {
     },
 }
 
-STREAMS = {"pal5": PAL5, "ngc4590": NGC4590, "ngc3201": NGC3201}
+
+NGC5466 = {
+    "stream_id": "ngc5466",
+    "x_column": 1,
+    "y_column": 2,
+    "xlim": None,
+    "ylim": None,
+    "axis": {
+        "xlabel": r"Galactocentric $y$ [$\rm{kpc}$]",
+        "ylabel": r"Galactocentric $z$ [$\rm{kpc}$]",
+    },
+}
+
+STREAMS = {"pal5": PAL5, "ngc4590": NGC4590, "ngc3201": NGC3201, "ngc5466":NGC5466}
 
 
 def _text_attribute(value):

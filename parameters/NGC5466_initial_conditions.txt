@@ -1,0 +1,2 @@
+# Columns: ra_deg,dec_deg,distance_kpc,pm_ra_masyr,pm_dec_masyr,radial_velocity_kms
+211.363709  ,  28.534445  ,  16.29917345,  -5.33520056, -0.80344707, 106.70086339

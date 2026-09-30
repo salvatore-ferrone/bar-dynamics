@@ -1,0 +1,20 @@
+[experiment]
+name = "ngc5466_bar_pattern_speed_v1"
+lookback_gyr = 4.0
+particle_count = 512
+random_seed = 42
+
+[experiment.pattern_speed_sweep]
+min_kms_kpc = 25.0
+max_kms_kpc = 60.0
+step_kms_kpc = 0.5
+rotation_direction = "clockwise"
+
+[components]
+milky_way = "../components/mw_fiducial_v1.ini"
+bar = "../components/bar_ferrers_v1.ini"
+cluster = "../components/cluster_ngc5466.ini"
+initial_conditions = "../NGC5466_initial_conditions.txt"
+
+[overrides.orientation]
+present_angle_deg = -25.0

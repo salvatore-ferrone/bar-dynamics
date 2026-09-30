@@ -6,6 +6,7 @@ from pathlib import Path
 
 import h5py
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.colors import Normalize
 from matplotlib.cm import ScalarMappable
 
@@ -44,7 +45,19 @@ NGC4590 = {
     },
 }
 
-STREAMS = {"pal5": PAL5, "ngc4590": NGC4590}
+NGC3201 = {
+    "stream_id": "ngc3201",
+    "x_column": 1,
+    "y_column": 2,
+    "xlim": None,
+    "ylim": None,
+    "axis": {
+        "xlabel": r"Galactocentric $y$ [$\rm{kpc}$]",
+        "ylabel": r"Galactocentric $z$ [$\rm{kpc}$]",
+    },
+}
+
+STREAMS = {"pal5": PAL5, "ngc4590": NGC4590, "ngc3201": NGC3201}
 
 
 def _text_attribute(value):
@@ -69,6 +82,13 @@ def find_default_simulation_file(stream_id):
 def _file_stream_id(path):
     with h5py.File(path, "r") as simulation:
         return _text_attribute(simulation.attrs.get("stream_id", ""))
+
+
+def _padded_limits(values):
+    low = float(np.min(values))
+    high = float(np.max(values))
+    padding = max((high - low) * 0.05, 0.5)
+    return low - padding, high + padding
 
 
 def load_barred_runs(simulation_file, stream_id):
@@ -131,6 +151,16 @@ def sweep_pattern_speeds(simulation_file, output_dir, stream_settings, limit=Non
             f"were found in {simulation_file}"
         )
 
+    if stream_settings["xlim"] is None or stream_settings["ylim"] is None:
+        coordinates = np.concatenate(
+            [run[2][:, [stream_settings["x_column"], stream_settings["y_column"]]] for run in runs]
+        )
+        stream_settings = {
+            **stream_settings,
+            "xlim": _padded_limits(coordinates[:, 0]),
+            "ylim": _padded_limits(coordinates[:, 1]),
+        }
+
     output_paths = []
     for run_key, speed, phase_space in runs:
         output_path = plot_run(run_key, speed, phase_space, stream_settings, output_dir)
@@ -141,7 +171,7 @@ def sweep_pattern_speeds(simulation_file, output_dir, stream_settings, limit=Non
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--stream", choices=sorted(STREAMS), default="pal5")
+    parser.add_argument("--stream", choices=sorted(STREAMS), default=None)
     parser.add_argument("--simulation-file", type=Path, default=None)
     parser.add_argument("--plot-dir", type=Path, default=None)
     parser.add_argument("--limit", type=int, help="only render the first N speeds (for testing)")
@@ -155,14 +185,21 @@ def main():
     if not args.usetex:
         plt.rcParams.update({"text.usetex": False, "mathtext.fontset": "stix"})
 
-    stream_settings = STREAMS[args.stream]
-    simulation_file = args.simulation_file or find_default_simulation_file(stream_settings["stream_id"])
-    if not simulation_file.is_file():
-        parser.error(f"Simulation file does not exist: {simulation_file}")
+    if args.simulation_file is not None:
+        simulation_file = args.simulation_file
+        if not simulation_file.is_file():
+            parser.error(f"Simulation file does not exist: {simulation_file}")
+        stream_id = args.stream or _file_stream_id(simulation_file)
+    else:
+        stream_id = args.stream or "pal5"
+        simulation_file = find_default_simulation_file(stream_id)
+    if stream_id not in STREAMS:
+        parser.error(f"No plotting settings are defined for stream_id={stream_id!r}")
+    stream_settings = STREAMS[stream_id]
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be a positive integer")
 
-    plot_dir = args.plot_dir or ROOT / "plots" / f"{args.stream}_bar_pattern_speed_v1"
+    plot_dir = args.plot_dir or ROOT / "plots" / f"{stream_id}_bar_pattern_speed_v1"
     outputs = sweep_pattern_speeds(
         simulation_file,
         plot_dir,

@@ -56,9 +56,29 @@ def load_experiment(toml_path):
 	return experiment, mw_ini_path, bar_ini_path, cluster_ini_path, bar_config, cluster_config, initial_conditions_path
 
 
-def make_potential(mw_ini_path, bar_ini_path, bar_config):
-	axisymmetric = agama.Potential(str(mw_ini_path))
-	bar = agama.Potential(str(bar_ini_path))
+def load_potential_parameters(*ini_paths):
+	parameters = {}
+	for ini_path in ini_paths:
+		config = configparser.ConfigParser()
+		config.optionxform = str
+		config.read(ini_path)
+		for section in config.sections():
+			if not section.startswith("Potential "):
+				continue
+			name = section.removeprefix("Potential ")
+			parameters[name] = {
+				key: value if key == "type" else float(value)
+				for key, value in config[section].items()
+			}
+	return parameters
+
+
+def make_potential(parameters, bar_config):
+	thin_disk = agama.Potential(parameters["thin_disk"])
+	thick_disk = agama.Potential(parameters["thick_disk"])
+	halo = agama.Potential(parameters["halo"])
+	axisymmetric = agama.Potential(thin_disk, thick_disk, halo)
+	bar = agama.Potential(parameters["bar"])
 	bar_axisymmetric = agama.Potential(
 		type="CylSpline", potential=bar, mmax=0, gridsizeR=30, gridsizez=32,
 		Rmin=0.1, Rmax=40, zmin=0.05, zmax=20,
@@ -160,10 +180,10 @@ def save_run_to_temp(temp_dir, run_key, run_type, pattern_speed_magnitude, patte
 
 
 def merge_runs(temp_paths, output_path, experiment, mw_model_id, bar_model_id, cluster_config, bar_config,
-		direction, texts, progenitor_now, lookback_gyr, count, seed):
+		direction, texts, potential_parameters, progenitor_now, lookback_gyr, count, seed):
 	"""Combine the independent per-run temp files into one packaged experiment file."""
 	with h5py.File(output_path, "w") as output:
-		output.attrs["schema_version"] = "2.0"
+		output.attrs["schema_version"] = "3.0"
 		output.attrs["experiment_id"] = experiment["experiment"]["name"]
 		output.attrs["stream_id"] = cluster_config.get("cluster", "stream_id")
 		output.attrs["milky_way_model_id"] = mw_model_id
@@ -185,11 +205,21 @@ def merge_runs(temp_paths, output_path, experiment, mw_model_id, bar_model_id, c
 			"Static m=0 CylSpline azimuthal average of the same Ferrers bar; "
 			"disk and halo identical and static"
 		)
-		output.attrs["experiment_toml"] = texts["experiment"]
-		output.attrs["milky_way_potential_ini"] = texts["milky_way"]
-		output.attrs["bar_potential_ini"] = texts["bar"]
-		output.attrs["cluster_ini"] = texts["cluster"]
-		output.attrs["initial_conditions_txt"] = texts["initial_conditions"]
+		input_files = output.create_group("input_files")
+		utf8 = h5py.string_dtype(encoding="utf-8")
+		for name, text in {
+			"experiment_toml": texts["experiment"],
+			"milky_way_potential_ini": texts["milky_way"],
+			"bar_potential_ini": texts["bar"],
+			"cluster_ini": texts["cluster"],
+			"initial_conditions_txt": texts["initial_conditions"],
+		}.items():
+			input_files.create_dataset(name, data=text, dtype=utf8)
+		potential_group = output.create_group("potential_parameters")
+		for component, parameters in potential_parameters.items():
+			component_group = potential_group.create_group(component)
+			for name, value in parameters.items():
+				component_group.attrs[name] = value
 		output.create_dataset("progenitor_present_phase_space", data=progenitor_now)
 
 		runs = output.create_group("runs")
@@ -241,7 +271,8 @@ def main():
 	direction_tag = "cw" if direction == "clockwise" else "ccw"
 
 	agama.setUnits(length=1, velocity=1, mass=1)
-	tidal_potential, background, bar, bar_angle = make_potential(mw_ini_path, bar_ini_path, bar_config)
+	potential_parameters = load_potential_parameters(mw_ini_path, bar_ini_path)
+	tidal_potential, background, bar, bar_angle = make_potential(potential_parameters, bar_config)
 	progenitor_now = progenitor_galactocentric_state(initial_conditions_path)
 
 	name = experiment["experiment"]["name"]
@@ -282,7 +313,7 @@ def main():
 
 		merge_runs(
 			temp_paths, output_path, experiment, mw_model_id, bar_model_id, cluster_config, bar_config,
-			direction, texts, progenitor_now, lookback_gyr, count, seed,
+			direction, texts, potential_parameters, progenitor_now, lookback_gyr, count, seed,
 		)
 	print(f"Merged {len(runs)} runs into {output_path}")
 

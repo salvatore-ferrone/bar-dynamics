@@ -5,12 +5,15 @@ Each run (the axisymmetric control plus one per pattern speed) is written to its
 own temporary HDF5 file, so runs stay independent (safe for future parallel
 execution). Once all runs finish, the temp files are merged into a single
 packaged HDF5 file for the whole experiment and the temp files are deleted.
+
+Usage: bar_pattern_speed_sweep.py [path/to/experiment.toml]
 """
 
-import argparse
 import configparser
 import hashlib
+import sys
 import tempfile
+import tomllib
 from pathlib import Path
 
 import agama
@@ -19,47 +22,49 @@ import numpy as np
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_CONFIG = ROOT / "parameters" / "pal5_bar_pattern_speed.ini"
-DEFAULT_INITIAL_CONDITIONS = ROOT / "parameters" / "pal5_initial_conditions.txt"
+DEFAULT_EXPERIMENT = ROOT / "parameters" / "experiments" / "pal5_bar_pattern_speed.toml"
 
 
-def make_potential(config):
-	def component(section, fields):
-		return {
-			key: config.get(section, value) if key == "type" else config.getfloat(section, value)
-			for key, value in fields.items()
-		}
+def apply_overrides(config, overrides):
+	"""Overwrite config[section][key] with any matching entries from the experiment's [overrides] table."""
+	for section, keys in overrides.items():
+		if config.has_section(section):
+			for key, value in keys.items():
+				config.set(section, key, str(value))
 
-	disk_thin = agama.Potential(
-		**component("disk_thin", {
-			"type": "type", "mass": "mass_msun", "scaleRadius": "scale_radius_kpc",
-			"scaleHeight": "scale_height_kpc",
-		})
-	)
-	disk_thick = agama.Potential(
-		**component("disk_thick", {
-			"type": "type", "mass": "mass_msun", "scaleRadius": "scale_radius_kpc",
-			"scaleHeight": "scale_height_kpc",
-		})
-	)
-	halo = agama.Potential(
-		**component("halo", {
-			"type": "type", "mass": "mass_msun", "scaleRadius": "scale_radius_kpc",
-		})
-	)
-	axisymmetric = agama.Potential(disk_thin, disk_thick, halo)
-	bar = agama.Potential(
-		**component("bar", {
-			"type": "type", "mass": "mass_msun", "scaleRadius": "scale_radius_kpc",
-			"axisRatioY": "axis_ratio_y", "axisRatioZ": "axis_ratio_z",
-		})
-	)
+
+def load_experiment(toml_path):
+	with open(toml_path, "rb") as handle:
+		experiment = tomllib.load(handle)
+	base = toml_path.parent
+	components = experiment["components"]
+	overrides = experiment.get("overrides", {})
+
+	mw_ini_path = (base / components["milky_way"]).resolve()
+	bar_ini_path = (base / components["bar"]).resolve()
+	cluster_ini_path = (base / components["cluster"]).resolve()
+	initial_conditions_path = (base / components["initial_conditions"]).resolve()
+
+	bar_config = configparser.ConfigParser()
+	bar_config.read(bar_ini_path)
+	apply_overrides(bar_config, overrides)
+
+	cluster_config = configparser.ConfigParser()
+	cluster_config.read(cluster_ini_path)
+	apply_overrides(cluster_config, overrides)
+
+	return experiment, mw_ini_path, bar_ini_path, cluster_ini_path, bar_config, cluster_config, initial_conditions_path
+
+
+def make_potential(mw_ini_path, bar_ini_path, bar_config):
+	axisymmetric = agama.Potential(str(mw_ini_path))
+	bar = agama.Potential(str(bar_ini_path))
 	bar_axisymmetric = agama.Potential(
 		type="CylSpline", potential=bar, mmax=0, gridsizeR=30, gridsizez=32,
 		Rmin=0.1, Rmax=40, zmin=0.05, zmax=20,
 	)
 	tidal_potential = agama.Potential(axisymmetric, bar_axisymmetric)
-	bar_angle = np.deg2rad(config.getfloat("bar", "present_angle_deg"))
+	bar_angle = np.deg2rad(bar_config.getfloat("orientation", "present_angle_deg"))
 	return tidal_potential, axisymmetric, bar, bar_angle
 
 
@@ -154,18 +159,18 @@ def save_run_to_temp(temp_dir, run_key, run_type, pattern_speed_magnitude, patte
 	return path
 
 
-def merge_runs(temp_paths, output_path, config, config_text, initial_conditions_text, progenitor_now,
-		lookback_gyr, count, seed):
+def merge_runs(temp_paths, output_path, experiment, mw_model_id, bar_model_id, cluster_config, bar_config,
+		direction, texts, progenitor_now, lookback_gyr, count, seed):
 	"""Combine the independent per-run temp files into one packaged experiment file."""
 	with h5py.File(output_path, "w") as output:
 		output.attrs["schema_version"] = "2.0"
-		output.attrs["experiment_id"] = config.get("experiment", "name")
-		output.attrs["stream_id"] = config.get("cluster", "stream_id")
-		output.attrs["milky_way_model_id"] = config.get("milky_way", "model_id")
-		output.attrs["bar_model_id"] = config.get("bar", "model_id")
-		output.attrs["rotation_direction"] = config.get("experiment", "rotation_direction")
-		output.attrs["bar_present_angle_deg"] = config.getfloat("bar", "present_angle_deg")
-		output.attrs["cluster_mass_msun"] = config.getfloat("cluster", "mass_msun")
+		output.attrs["experiment_id"] = experiment["experiment"]["name"]
+		output.attrs["stream_id"] = cluster_config.get("cluster", "stream_id")
+		output.attrs["milky_way_model_id"] = mw_model_id
+		output.attrs["bar_model_id"] = bar_model_id
+		output.attrs["rotation_direction"] = direction
+		output.attrs["bar_present_angle_deg"] = bar_config.getfloat("orientation", "present_angle_deg")
+		output.attrs["cluster_mass_msun"] = cluster_config.getfloat("cluster", "mass_msun")
 		output.attrs["lookback_gyr"] = lookback_gyr
 		output.attrs["particle_count"] = count
 		output.attrs["random_seed"] = seed
@@ -180,8 +185,11 @@ def merge_runs(temp_paths, output_path, config, config_text, initial_conditions_
 			"Static m=0 CylSpline azimuthal average of the same Ferrers bar; "
 			"disk and halo identical and static"
 		)
-		output.attrs["experiment_config_ini"] = config_text
-		output.attrs["initial_conditions_txt"] = initial_conditions_text
+		output.attrs["experiment_toml"] = texts["experiment"]
+		output.attrs["milky_way_potential_ini"] = texts["milky_way"]
+		output.attrs["bar_potential_ini"] = texts["bar"]
+		output.attrs["cluster_ini"] = texts["cluster"]
+		output.attrs["initial_conditions_txt"] = texts["initial_conditions"]
 		output.create_dataset("progenitor_present_phase_space", data=progenitor_now)
 
 		runs = output.create_group("runs")
@@ -197,50 +205,51 @@ def merge_runs(temp_paths, output_path, config, config_text, initial_conditions_
 
 
 def main():
-	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-	parser.add_argument("--initial-conditions", type=Path, default=DEFAULT_INITIAL_CONDITIONS)
-	parser.add_argument("--output-dir", type=Path, default=ROOT / "simulations")
-	args = parser.parse_args()
+	toml_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_EXPERIMENT
 
-	config = configparser.ConfigParser()
-	if not config.read(args.config):
-		parser.error(f"Could not read experiment config: {args.config}")
-	config_text = args.config.read_text()
-	initial_conditions_text = args.initial_conditions.read_text()
-	input_hash = hashlib.sha256(
-		(config_text + "\n" + initial_conditions_text).encode("utf-8")
-	).hexdigest()[:8]
+	experiment, mw_ini_path, bar_ini_path, cluster_ini_path, bar_config, cluster_config, initial_conditions_path = (
+		load_experiment(toml_path)
+	)
+	texts = {
+		"experiment": toml_path.read_text(),
+		"milky_way": mw_ini_path.read_text(),
+		"bar": bar_ini_path.read_text(),
+		"cluster": cluster_ini_path.read_text(),
+		"initial_conditions": initial_conditions_path.read_text(),
+	}
+	input_hash = hashlib.sha256("\n".join(texts.values()).encode("utf-8")).hexdigest()[:8]
 
-	minimum = config.getfloat("experiment", "pattern_speed_min_kms_kpc")
-	maximum = config.getfloat("experiment", "pattern_speed_max_kms_kpc")
-	step = config.getfloat("experiment", "pattern_speed_step_kms_kpc")
+	sweep = experiment["experiment"]["pattern_speed_sweep"]
+	minimum = sweep["min_kms_kpc"]
+	maximum = sweep["max_kms_kpc"]
+	step = sweep["step_kms_kpc"]
 	if step <= 0 or maximum < minimum:
-		parser.error("Pattern-speed range requires step > 0 and maximum >= minimum")
+		raise SystemExit("Pattern-speed range requires step > 0 and maximum >= minimum")
 	steps = (maximum - minimum) / step
 	if not np.isclose(steps, round(steps)):
-		parser.error("Pattern-speed range must be evenly divisible by its step")
+		raise SystemExit("Pattern-speed range must be evenly divisible by its step")
 	speeds = np.round(minimum + step * np.arange(round(steps) + 1), decimals=10)
 
-	lookback_gyr = config.getfloat("experiment", "lookback_gyr")
-	count = config.getint("experiment", "particle_count")
-	seed = config.getint("experiment", "random_seed")
-	cluster_mass = config.getfloat("cluster", "mass_msun")
-	direction = config.get("experiment", "rotation_direction").lower()
+	lookback_gyr = experiment["experiment"]["lookback_gyr"]
+	count = experiment["experiment"]["particle_count"]
+	seed = experiment["experiment"]["random_seed"]
+	cluster_mass = cluster_config.getfloat("cluster", "mass_msun")
+	direction = sweep["rotation_direction"].lower()
 	if direction not in {"clockwise", "counterclockwise"}:
-		parser.error("rotation_direction must be clockwise or counterclockwise")
+		raise SystemExit("rotation_direction must be clockwise or counterclockwise")
 	direction_sign = -1.0 if direction == "clockwise" else 1.0
 	direction_tag = "cw" if direction == "clockwise" else "ccw"
 
 	agama.setUnits(length=1, velocity=1, mass=1)
-	tidal_potential, background, bar, bar_angle = make_potential(config)
-	progenitor_now = progenitor_galactocentric_state(args.initial_conditions)
+	tidal_potential, background, bar, bar_angle = make_potential(mw_ini_path, bar_ini_path, bar_config)
+	progenitor_now = progenitor_galactocentric_state(initial_conditions_path)
 
-	name = config.get("experiment", "name")
-	model_id = config.get("milky_way", "model_id")
+	name = experiment["experiment"]["name"]
+	mw_model_id = mw_ini_path.stem
+	bar_model_id = bar_ini_path.stem
 	lookback_tag = f"{lookback_gyr:g}".replace(".", "p")
 	experiment_name = (
-		f"{name}__mw-{model_id}__lookback-{lookback_tag}gyr__n-{count}__"
+		f"{name}__mw-{mw_model_id}__lookback-{lookback_tag}gyr__n-{count}__"
 		f"seed-{seed:04d}__{input_hash}"
 	)
 
@@ -254,8 +263,9 @@ def main():
 		run_key = f"omega_{direction_tag}_{speed:05.1f}"
 		runs.append((run_key, "barred", float(speed), direction_sign * speed, model))
 
-	args.output_dir.mkdir(parents=True, exist_ok=True)
-	output_path = args.output_dir / f"{experiment_name}.h5"
+	output_dir = ROOT / "simulations"
+	output_dir.mkdir(parents=True, exist_ok=True)
+	output_path = output_dir / f"{experiment_name}.h5"
 
 	print(f"Running {len(runs)} simulations: one control and {len(speeds)} pattern speeds")
 	with tempfile.TemporaryDirectory(prefix=f"{experiment_name}__") as temp_dir_name:
@@ -271,8 +281,8 @@ def main():
 			print(f"[{index}/{len(runs)}] {run_key} -> temp file written")
 
 		merge_runs(
-			temp_paths, output_path, config, config_text, initial_conditions_text, progenitor_now,
-			lookback_gyr, count, seed,
+			temp_paths, output_path, experiment, mw_model_id, bar_model_id, cluster_config, bar_config,
+			direction, texts, progenitor_now, lookback_gyr, count, seed,
 		)
 	print(f"Merged {len(runs)} runs into {output_path}")
 

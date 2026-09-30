@@ -12,7 +12,7 @@ How does the galactic bar effect stellar streams
 
 The initial experiment uses four folders:
 
-- `parameters/`: Pal 5 phase-space data and the INI configuration for the Milky Way model and sweep.
+- `parameters/`: Pal 5 phase-space data, plus the physical model files under `components/` (Milky Way axisymmetric background, bar, cluster) and the per-experiment sweep settings under `experiments/`.
 - `experiments/`: Agama simulation drivers.
 - `simulations/`: one merged HDF5 file per experiment, with one group per run.
 - `analysis/` and `plots/`: analysis scripts and quick-look figures.
@@ -20,10 +20,10 @@ The initial experiment uses four folders:
 Run the 71 clockwise bar speeds from 25 to 60 km/s/kpc, plus the matched axisymmetric control, with:
 
 ```bash
-python experiments/bar_pattern_speed_sweep.py
+python experiments/bar_pattern_speed_sweep.py parameters/experiments/pal5_bar_pattern_speed.toml
 ```
 
-The INI stores positive pattern-speed magnitudes; clockwise Agama pattern speeds are signed negative. The control retains the azimuthally averaged (`m=0`) contribution of the same Ferrers bar while keeping the disk and halo unchanged and static.
+The experiment `.toml` stores positive pattern-speed magnitudes; clockwise Agama pattern speeds are signed negative. The control retains the azimuthally averaged (`m=0`) contribution of the same Ferrers bar while keeping the disk and halo unchanged and static.
 
 Each run is first written to its own temporary HDF5 file (independent, so future runs can be parallelized safely), then all runs are merged into a single packaged HDF5 file under `simulations/`, and the temp files are deleted. The merged file stores shared metadata (config, initial conditions, units, software versions) at the top level, plus one group per run under `runs/<run_key>` containing that run's progenitor orbit (`progenitor_orbit_phase_space`) and final stream (`stream_phase_space`).
 

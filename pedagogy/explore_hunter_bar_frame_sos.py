@@ -11,7 +11,7 @@ agama.setUnits(length=1, mass=1, velocity=1)
 
 
 def jacobi_energy(traj, pot, omega):
-	"""Jacobi constant evaluated from rotating-frame states [x,y,z,vx,vy,vz]."""
+	"""Jacobi invariant J = E - Omega*Lz from inertial states [x,y,z,vx,vy,vz]."""
 	x = traj[:, 0]
 	y = traj[:, 1]
 	z = traj[:, 2]
@@ -19,18 +19,20 @@ def jacobi_energy(traj, pot, omega):
 	vy = traj[:, 4]
 	vz = traj[:, 5]
 	kinetic = 0.5 * (vx**2 + vy**2 + vz**2)
-	peff = barframe.pot_eff(pot, omega, np.column_stack((x, y, z)))
-	return kinetic + peff
+	phi = pot.potential(np.column_stack((x, y, z)))
+	lz = x * vy - y * vx
+	return kinetic + phi - omega * lz
 
 
 def vy_from_section_energy(x, vx, ej, pot, omega):
-	"""Given (x,vx) on y=z=vz=0 section, solve for positive vy at fixed Ej."""
+	"""Given rotating-frame (x,vx_rot), return inertial vy on y=z=vz=0 section."""
 	peff = barframe.pot_eff(pot, omega, np.array([x, 0.0, 0.0], dtype=np.float64))
-	vy2 = 2.0 * (ej - peff) - vx**2
-	if vy2 <= 0.0:
+	vy_rot2 = 2.0 * (ej - peff) - vx**2
+	if vy_rot2 <= 0.0:
 		return np.nan
 
-	return float(np.sqrt(vy2))
+	vy_rot = float(np.sqrt(vy_rot2))
+	return vy_rot + omega * x
 
 
 def sos_points_from_traj(traj, ej, pot, omega):
@@ -49,8 +51,13 @@ def sos_points_from_traj(traj, ej, pot, omega):
 	t1 = traj[1:][mask]
 	alpha = -t0[:, 1] / (t1[:, 1] - t0[:, 1])
 	xcross = t0[:, 0] + alpha * (t1[:, 0] - t0[:, 0])
-	vxcross = t0[:, 3] + alpha * (t1[:, 3] - t0[:, 3])
-	vycross = t0[:, 4] + alpha * (t1[:, 4] - t0[:, 4])
+	ycross = t0[:, 1] + alpha * (t1[:, 1] - t0[:, 1])
+	vx_inert = t0[:, 3] + alpha * (t1[:, 3] - t0[:, 3])
+	vy_inert = t0[:, 4] + alpha * (t1[:, 4] - t0[:, 4])
+
+	# Convert to rotating-frame velocities for the section criteria/coordinates.
+	vxcross = vx_inert + omega * ycross
+	vycross = vy_inert - omega * xcross
 
 	keep_upward = vycross > 0.0
 	if not np.any(keep_upward):
@@ -84,12 +91,12 @@ def make_zvc(ej, pot, omega, tolerance=1e-3, npts=601):
 # ----------------------- user-tunable parameters -----------------------
 omega = -37.5
 integration_time = 10.0
-n_samples = 12000
-jacobi_warn_threshold = 5e-8
+trajsize = 120000
+jacobi_warn_threshold = 1e-8
 orbit_tail_fraction = 0.10
 
 # Pick Jacobi energy here.
-ej_fraction = 49/50
+ej_fraction = 9/10
 # ----------------------------------------------------------------------
 
 
@@ -192,10 +199,13 @@ def integrate_with_agama(state0):
 		potential=pot,
 		Omega=omega,
 		time=integration_time,
+		trajsize=trajsize,
 		dtype=object,
 	)
-	times = np.linspace(0.0, integration_time, n_samples)
-	traj = orbit_spline(times)
+	# Evaluate at the integrator's own trajectory nodes rather than arbitrary
+	# uniform times; this usually yields cleaner Jacobi diagnostics.
+	traj = orbit_spline(orbit_spline)
+	times = np.linspace(0.0, integration_time, traj.shape[0])
 	return times, traj
 
 
@@ -212,8 +222,10 @@ def add_orbit_from_section(x, vx):
 	traj_plot = traj[-n_tail:]
 
 	ej_traj = jacobi_energy(traj, pot, omega)
-	denom = max(abs(Ej), 1e-12)
-	rel_err = np.abs((ej_traj - Ej) / denom)
+	denom = max(abs(ej_traj[0]), 1e-12)
+	rel_err = np.abs((ej_traj - ej_traj[0]) / denom)
+	median_rel_err = float(np.median(rel_err))
+	p99_rel_err = float(np.percentile(rel_err, 99.0))
 	max_rel_err = float(np.max(rel_err))
 
 	sos = sos_points_from_traj(traj, Ej, pot, omega)
@@ -244,13 +256,16 @@ def add_orbit_from_section(x, vx):
 		]
 	)
 
-	msg = f"Ncross={sos.shape[0]} | max rel Jacobi err={max_rel_err:.3e}"
-	if max_rel_err > jacobi_warn_threshold:
-		msg += " [warning: raise n_samples or reduce step via shorter integration chunks]"
+	msg = (
+		f"Ncross={sos.shape[0]} | med={median_rel_err:.2e} "
+		f"p99={p99_rel_err:.2e} max={max_rel_err:.2e}"
+	)
+	if p99_rel_err > jacobi_warn_threshold:
+		msg += " [warning: raise trajsize or reduce integration_time]"
 	status_text.set_text(msg)
 	print(
-		"seed (x,vx,vy)=({:.6f},{:.6f},{:.6f}) | crossings={} | max rel Jacobi err={:.3e}".format(
-			state0[0], state0[3], state0[4], sos.shape[0], max_rel_err
+		"seed (x,vx,vy)=({:.6f},{:.6f},{:.6f}) | crossings={} | med={:.3e} p99={:.3e} max={:.3e}".format(
+			state0[0], state0[3], state0[4], sos.shape[0], median_rel_err, p99_rel_err, max_rel_err
 		)
 	)
 	fig.canvas.draw_idle()

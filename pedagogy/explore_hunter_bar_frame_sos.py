@@ -29,6 +29,7 @@ def vy_from_section_energy(x, vx, ej, pot, omega):
 	vy2 = 2.0 * (ej - peff) - vx**2
 	if vy2 <= 0.0:
 		return np.nan
+
 	return float(np.sqrt(vy2))
 
 

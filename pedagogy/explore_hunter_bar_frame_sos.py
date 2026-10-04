@@ -33,8 +33,12 @@ def vy_from_section_energy(x, vx, ej, pot, omega):
 	return float(np.sqrt(vy2))
 
 
-def sos_points_from_traj(traj):
-	"""Extract (x,vx) for upward y=0 crossings from sampled trajectory."""
+def sos_points_from_traj(traj, ej, pot, omega):
+	"""Extract (x,vx) for upward y=0 crossings from sampled trajectory.
+
+	A small Jacobi-consistent correction keeps points inside the allowed
+	zero-velocity region when interpolation noise pushes them slightly outside.
+	"""
 	y0 = traj[:-1, 1]
 	y1 = traj[1:, 1]
 	mask = (y0 <= 0.0) & (y1 > 0.0)
@@ -47,8 +51,25 @@ def sos_points_from_traj(traj):
 	xcross = t0[:, 0] + alpha * (t1[:, 0] - t0[:, 0])
 	vxcross = t0[:, 3] + alpha * (t1[:, 3] - t0[:, 3])
 	vycross = t0[:, 4] + alpha * (t1[:, 4] - t0[:, 4])
-	keep = vycross > 0.0
-	return np.column_stack((xcross[keep], vxcross[keep]))
+
+	keep_upward = vycross > 0.0
+	if not np.any(keep_upward):
+		return np.empty((0, 2), dtype=np.float64)
+
+	xcross = xcross[keep_upward]
+	vxcross = vxcross[keep_upward]
+
+	peff = barframe.pot_eff(
+		pot,
+		omega,
+		np.column_stack((xcross, np.zeros_like(xcross), np.zeros_like(xcross))),
+	)
+	vx2_allowed = 2.0 * np.maximum(ej - peff, 0.0)
+	vxmax = np.sqrt(vx2_allowed)
+
+	# Keep sign but clip tiny overshoots to the allowed boundary.
+	vxcross = np.sign(vxcross) * np.minimum(np.abs(vxcross), vxmax)
+	return np.column_stack((xcross, vxcross))
 
 
 def make_zvc(ej, pot, omega, tolerance=1e-3, npts=601):
@@ -62,13 +83,13 @@ def make_zvc(ej, pot, omega, tolerance=1e-3, npts=601):
 
 # ----------------------- user-tunable parameters -----------------------
 omega = -37.5
-integration_time = 4.0
+integration_time = 10.0
 n_samples = 12000
 jacobi_warn_threshold = 5e-8
 orbit_tail_fraction = 0.10
 
 # Pick Jacobi energy here.
-ej_fraction = 9/10
+ej_fraction = 49/50
 # ----------------------------------------------------------------------
 
 
@@ -195,7 +216,7 @@ def add_orbit_from_section(x, vx):
 	rel_err = np.abs((ej_traj - Ej) / denom)
 	max_rel_err = float(np.max(rel_err))
 
-	sos = sos_points_from_traj(traj)
+	sos = sos_points_from_traj(traj, Ej, pot, omega)
 	color = rng.uniform(0.15, 0.85, size=3)
 
 	orbit_line = ax_orbit.plot(
@@ -264,5 +285,5 @@ init_axes()
 
 print("Interactive Hunter+bar-frame SOS explorer ready.")
 print("Right-click in the right panel (x,vx) to launch an orbit at fixed Ej.")
-print("Hotkeys: e/backspace=remove last, q=remove first, c=clear all.")
+print("Hotkeys: u/backspace=remove last, 1=remove first, c=clear all.")
 plt.show()

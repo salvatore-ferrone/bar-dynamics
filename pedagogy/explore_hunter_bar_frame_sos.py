@@ -198,8 +198,8 @@ if __name__=="__main__":
 	orbit_tail_fraction = 0.10
 
 	# ROUND 4
-	ej_fraction = 49/50
-	integration_time = 10.0
+	ej_fraction = (3+4)/(3+4+1)
+	integration_time = 3
 
 	# # ROUND 3
 	# ej_fraction = 19/20

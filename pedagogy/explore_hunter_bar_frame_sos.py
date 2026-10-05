@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Button
 import numpy as np
@@ -86,6 +88,104 @@ def make_zvc(ej, pot, omega, tolerance=1e-3, npts=601):
 	xs_poly = np.concatenate((xs, xs[::-1], [xs[0]]))
 	vxs_poly = np.concatenate((vxs, -vxs[::-1], [vxs[0]]))
 	return xmax, xs, vxs, xs_poly, vxs_poly
+
+
+@dataclass
+class SectionOrbitResult:
+	state0: np.ndarray
+	times: np.ndarray
+	traj: np.ndarray
+	sos: np.ndarray
+	ej_traj: np.ndarray
+	trajectory_tail: np.ndarray
+	median_rel_err: float
+	p99_rel_err: float
+	max_rel_err: float
+	vy: float
+
+
+def integrate_section_orbit(
+	pot,
+	omega,
+	ej,
+	x,
+	vx,
+	integration_time=10.0,
+	trajsize=120000,
+	orbit_tail_fraction=0.10,
+):
+	"""Integrate one orbit seeded on the y=0 section and return reusable data.
+
+	This is the notebook-friendly entry point: use the returned arrays to build
+	custom plots or diagnostics without launching the interactive figure.
+	"""
+	vy = vy_from_section_energy(x, vx, ej, pot, omega)
+	if not np.isfinite(vy):
+		raise ValueError("outside the allowed zero-velocity region")
+
+	state0 = np.array([x, 0.0, 0.0, vx, vy, 0.0], dtype=np.float64)
+	orbit_spline = agama.orbit(
+		ic=state0,
+		potential=pot,
+		Omega=omega,
+		time=integration_time,
+		trajsize=trajsize,
+		dtype=object,
+	)
+	traj = orbit_spline(orbit_spline)
+	times = np.linspace(0.0, integration_time, traj.shape[0])
+	ej_traj = jacobi_energy(traj, pot, omega)
+	denom = max(abs(ej_traj[0]), 1e-12)
+	rel_err = np.abs((ej_traj - ej_traj[0]) / denom)
+	median_rel_err = float(np.median(rel_err))
+	p99_rel_err = float(np.percentile(rel_err, 99.0))
+	max_rel_err = float(np.max(rel_err))
+	n_tail = max(2, int(orbit_tail_fraction * traj.shape[0]))
+	trajectory_tail = traj[-n_tail:]
+	sos = sos_points_from_traj(traj, ej, pot, omega)
+	return SectionOrbitResult(
+		state0=state0,
+		times=times,
+		traj=traj,
+		sos=sos,
+		ej_traj=ej_traj,
+		trajectory_tail=trajectory_tail,
+		median_rel_err=median_rel_err,
+		p99_rel_err=p99_rel_err,
+		max_rel_err=max_rel_err,
+		vy=vy,
+	)
+
+
+def integrate_section_orbit_kwargs(kwargs):
+	"""Convenience wrapper for multiprocessing over a list of keyword dicts."""
+	return integrate_section_orbit(**kwargs)
+
+
+def plot_section_orbit(ax_orbit, ax_sos, result, color=None):
+	"""Plot a SectionOrbitResult onto caller-supplied axes.
+
+	Returns the artist handles so notebook code can keep or remove them later.
+	"""
+	if color is None:
+		color = "C0"
+	orbit_line = ax_orbit.plot(
+		result.trajectory_tail[:, 0], result.trajectory_tail[:, 1], color=color, lw=0.9, alpha=0.95
+	)[0]
+	orbit_seed_marker = ax_orbit.plot(
+		[result.state0[0]], [result.state0[1]], marker="o", color=color, ms=4
+	)[0]
+
+	sos_points_artist = None
+	if result.sos.shape[0] > 0:
+		sos_points_artist = ax_sos.plot(
+			result.sos[:, 0], result.sos[:, 1], "o", color=color, ms=1.7, mew=0, alpha=0.9
+		)[0]
+	sos_seed_marker = ax_sos.plot(
+		[result.state0[0]], [result.state0[3]], marker="x", color=color, ms=6, mew=1.0
+	)[0]
+
+	return [orbit_line, orbit_seed_marker, sos_points_artist, sos_seed_marker]
 
 
 

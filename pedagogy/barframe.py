@@ -3,7 +3,6 @@ helper functions for the bar frame
 '''
 
 import numpy as np 
-import agama 
 from scipy import optimize 
 
 def pot_eff(pot,omega,pos):

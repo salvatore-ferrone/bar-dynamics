@@ -21,27 +21,26 @@ coleman_components=dict(\
     rcut = 4.37,
     rho_c = 3.16e9,)
 
-portail_components = {
-    "component2": dict(rho_i=0.5e9,    
-                       xi=5.364, 
-                       yi=0.959, 
-                       zi=0.611,
-                       R_in=0.558, 
-                       R_out=3.19,  
-                       cperp=0.97,  
-                       n_in=3.196, 
-                       n_out=16.731,  
-                       n_a=1.0),
-    "component3": dict(rho_i=1.743e13, 
-                       xi=0.478, 
-                       yi=0.297, 
-                       zi=0.252,
-                       R_in=7.607, 
-                       R_out=2.204, 
-                       cperp=1.879, 
-                       n_in=1.63, 
-                       n_out=-27.291,
-                       n_a=1.0),}
+portail_bar_1 = dict(rho_i      =   0.5e9,    
+                       xi       =   5.364, 
+                       yi       =   0.959, 
+                       zi       =   0.611,
+                       R_in     =   0.558, 
+                       R_out    =   3.19,  
+                       cperp    =   0.97,  
+                       n_in     =   3.196, 
+                       n_out    =   16.731,  
+                       n_a      =   1.0)
+portail_bar_2 = dict(rho_i    =   1.743e13, 
+                       xi           =   0.478, 
+                       yi           =   0.297, 
+                       zi           =   0.252,
+                       R_in         =   7.607, 
+                       R_out        =   2.204, 
+                       cperp        =   1.879, 
+                       n_in         =   1.63, 
+                       n_out        =   -27.291,
+                       n_a          =   1.0)
 
 supermassiveblackhole = dict(type='Plummer', mass=4.154e6,scaleRadius=1e-4)
 nsc = dict(type='Dehnen', mass=6.1e7, gamma=0.71, scaleRadius=5.9e-3, axisRatioZ=0.73)
@@ -131,11 +130,11 @@ def portail_component(rho_i, xi, yi, zi, R_in, R_out, cperp, n_in, n_out, n_a):
 
 def mw_model():
     bar1=coleman2020(**coleman_components)
-    bar2=portail_component(**portail_components['component2'])
-    bar3=portail_component(**portail_components['component3'])    
+    bar2=portail_component(**portail_bar_1)
+    bar3=portail_component(**portail_bar_2)    
     pbar1   = agama.Potential(type='CylSpline', density=bar1,symmetry='triaxial',mmax=8,gridSizeR=40, gridSizeZ=40, Rmin=0.001, Rmax=20, Zmin=0.001, Zmax=20,)
     pbar2   = agama.Potential(type='CylSpline', density=bar2,symmetry='triaxial',mmax=8,gridSizeR=40, gridSizeZ=40, Rmin=0.001, Rmax=20, Zmin=0.001, Zmax=20,)
-    pbar3   = agama.Potential(type='CylSpline', density=bar3,symmetry='triaxial',mmax=8,gridSizeR=40, gridSizeZ=40, Rmin=0.001, Rmax=20, Zmin=0.001, Zmax=20,)    
+    pbar3   = agama.Potential(type='CylSpline', density=bar3,symmetry='triaxial',mmax=8,gridSizeR=40, gridSizeZ=40, Rmin=0.001, Rmax=20, Zmin=0.001, Zmax=20,)
     psagA   = agama.Potential(**supermassiveblackhole)
     pnsc    = agama.Potential(**nsc)
     pnsd1   = agama.Potential(**NSD1)

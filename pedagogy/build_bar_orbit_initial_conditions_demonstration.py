@@ -39,7 +39,8 @@ def make_frame_saver(figbasename):
     return save
 
 
-def draw_demonstration(pot_total, omega, seed, figbasename, npoints=201, threshold=1e-3):
+def draw_demonstration(pot_total, omega, seed, figbasename, npoints=201, threshold=1e-3, weighting="phase_space"):
+    # weighting: "none", "volume" or "phase_space" (see barframe.sample_position_within_bar)
     rng = numpy.random.default_rng(seed)
     save = make_frame_saver(figbasename)
 
@@ -49,11 +50,8 @@ def draw_demonstration(pot_total, omega, seed, figbasename, npoints=201, thresho
     e_0 = barframe.pot_eff(pot_total, omega, numpy.array([0.0, 0.0, 0.0]))
     e_l4 = barframe.pot_eff(pot_total, omega, numpy.array([0, y_l4, 0]))
 
-    x_sample = rng.uniform(-x_l1, x_l1)
+    x_sample, y_sample, z_sample = barframe.sample_position_within_bar(pot_total, omega, rng, x_l1, e_l1, weighting)
     y_max = barframe.ymax_within_bar(pot_total, omega, x_sample, e_l1, x_l1 / 2)
-    y_sample = rng.uniform(-y_max, y_max)
-    z_max = barframe.zmax_within_bar(pot_total, omega, x_sample, y_sample, e_l1, y_max)
-    z_sample = rng.uniform(-z_max, z_max)
     availablespeed = barframe.available_speed(pot_total, omega, [x_sample, y_sample, z_sample], e_l1)
     _, v_sample, theta, phi = barframe.sample_velocity_isotropic(availablespeed, rng)
 
@@ -176,4 +174,4 @@ def draw_demonstration(pot_total, omega, seed, figbasename, npoints=201, thresho
 if __name__ == "__main__":
     omega = -37.5
     pot_total = build_total_potential()
-    draw_demonstration(pot_total, omega, seed=10, figbasename="plots/bar_init_conds/bar_init_conds_fig_frame_{:03d}.png")
+    draw_demonstration(pot_total, omega, seed=11, figbasename="plots/bar_init_conds/bar_init_conds_fig_frame_{:03d}.png")

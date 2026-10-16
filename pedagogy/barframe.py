@@ -155,8 +155,16 @@ def sample_position_within_bar(pot, omega, rng, xl1, EL1, weighting="none", enve
         if rng.uniform() < min(1.0, w / envelope):
             return pos
 
-def sample_phase_space_within_bar(pot, omega, norbits=50, seed=10, weighting="none"):
-    """Return (norbits, 6) array of [x, y, z, vx, vy, vz] bounded by the L1 jacobi energy."""
+def to_inertial_velocity(ics, omega):
+    """Bar-frame velocities -> the instantaneously coincident inertial frame that agama.orbit expects."""
+    out = np.array(ics, dtype=float)
+    out[..., 3] -= omega * ics[..., 1]
+    out[..., 4] += omega * ics[..., 0]
+    return out
+
+def sample_phase_space_within_bar(pot, omega, norbits=50, seed=10, weighting="none", inertial=True):
+    """Return (norbits, 6) array of [x, y, z, vx, vy, vz] bounded by the L1 jacobi energy.
+    inertial=False returns the bar-frame velocities."""
     rng = np.random.default_rng(seed=seed)
     xl1, EL1 = lagrange_l1_energy(pot, omega)
     envelope = None if weighting == "none" else _weight_envelope(pot, omega, xl1, EL1, weighting)
@@ -165,4 +173,4 @@ def sample_phase_space_within_bar(pot, omega, norbits=50, seed=10, weighting="no
         pos = sample_position_within_bar(pot, omega, rng, xl1, EL1, weighting, envelope)
         vec, *_ = sample_velocity_isotropic(available_speed(pot, omega, pos, EL1), rng)
         ics[k] = np.concatenate([pos, vec])
-    return ics
+    return to_inertial_velocity(ics, omega) if inertial else ics

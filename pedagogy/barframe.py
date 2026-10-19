@@ -60,6 +60,35 @@ def vx_zero_velocity_curve(x,pot,omega,Ej):
     kinetic_energy = Ej - pot_eff(pot,omega,pos)
     return np.sqrt(2*np.maximum(kinetic_energy,0.0))
 
+def xy_plane_zero_velocity_curve(pot,omega,Ej,nangles=360,nr=2000):
+    '''
+    Given a jacobi energy, find the zero velocity curve in the x-y plane. 
+    Returns closed-curve arrays (x, y) of the boundary connected to the origin, found as the 
+    first crossing of pot_eff = Ej along rays from the origin. Needs Ej <= E_L1, else nan arrays.
+    '''
+    xl1, EL1 = lagrange_l1_energy(pot, omega)
+    phi = np.linspace(0, 2*np.pi, nangles, endpoint=False)
+    if Ej > EL1:
+        print("warning, Given jacobi energy allows particle to escape the bar")
+        return np.full(nangles+1, np.nan), np.full(nangles+1, np.nan)
+    # slightly beyond L1 so the Ej = E_L1 curve is still bracketed along the bar axis
+    r = np.linspace(1e-3, 1.05*xl1, nr)
+    pos = np.zeros((nangles, nr, 3))
+    pos[..., 0] = np.cos(phi)[:, None] * r
+    pos[..., 1] = np.sin(phi)[:, None] * r
+    g = pot_eff(pot, omega, pos.reshape(-1, 3)).reshape(nangles, nr) - Ej
+    # first index where the ray leaves the allowed region (g > 0 means kinetic energy < 0)
+    outside = g > 0
+    i = np.where(outside.any(axis=1), outside.argmax(axis=1), nr - 1)
+    i = np.maximum(i, 1)
+    rows = np.arange(nangles)
+    g0, g1 = g[rows, i-1], g[rows, i]
+    # linear interpolation of the root between the bracketing grid points
+    frac = np.clip(-g0 / np.where(g1 == g0, 1, g1 - g0), 0, 1)
+    rb = r[i-1] + frac * (r[i] - r[i-1])
+    x, y = rb*np.cos(phi), rb*np.sin(phi)
+    return np.append(x, x[0]), np.append(y, y[0])
+
 def sample_initial_conditions_allowed_within_bar(potential,omega,Ej,norbits=50,seed=10,xmax_kwargs={"xmin": 0.1, "xmax": 20, "tolerance": 1e-3},):
     # Get the maximum extent in x, when kinetic energy is zero 
     xmax = xmaximum_within_bar(pot=potential,omega=omega,Ej=Ej,**xmax_kwargs)

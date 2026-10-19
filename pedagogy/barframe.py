@@ -165,12 +165,45 @@ def to_inertial_velocity(ics, omega):
 def sample_phase_space_within_bar(pot, omega, norbits=50, seed=10, weighting="none", inertial=True):
     """Return (norbits, 6) array of [x, y, z, vx, vy, vz] bounded by the L1 jacobi energy.
     inertial=False returns the bar-frame velocities."""
+    if weighting not in ("none", "volume", "phase_space"):
+        raise ValueError(f"unknown weighting {weighting!r}")
     rng = np.random.default_rng(seed=seed)
     xl1, EL1 = lagrange_l1_energy(pot, omega)
-    envelope = None if weighting == "none" else _weight_envelope(pot, omega, xl1, EL1, weighting)
-    ics = np.zeros((norbits, 6))
-    for k in range(norbits):
-        pos = sample_position_within_bar(pot, omega, rng, xl1, EL1, weighting, envelope)
-        vec, *_ = sample_velocity_isotropic(available_speed(pot, omega, pos, EL1), rng)
-        ics[k] = np.concatenate([pos, vec])
+    if weighting == "none":
+        # slow sequential draw, kept for its non-uniform position density
+        ics = np.zeros((norbits, 6))
+        for k in range(norbits):
+            pos = sample_position_within_bar(pot, omega, rng, xl1, EL1, weighting)
+            vec, *_ = sample_velocity_isotropic(available_speed(pot, omega, pos, EL1), rng)
+            ics[k] = np.concatenate([pos, vec])
+        return to_inertial_velocity(ics, omega) if inertial else ics
+
+    # batched rejection in the cube |x|,|y|,|z| < xL1, restricted to the sphere r < xL1 to stay connected to the origin
+    positions, kinetic = [], []
+    nkept, envelope, batch = 0, None, 100000
+    while nkept < norbits:
+        pos = rng.uniform(-xl1, xl1, size=(batch, 3))
+        pos = pos[np.sum(pos**2, axis=1) < xl1**2]
+        ke = EL1 - pot_eff(pot, omega, pos)
+        pos, ke = pos[ke > 0], ke[ke > 0]
+        if weighting == "phase_space":
+            w = ke**1.5
+            if envelope is None:
+                envelope = 1.2 * w.max()  # later samples above this are clipped
+            keep = rng.uniform(size=len(w)) < np.minimum(1.0, w / envelope)
+            pos, ke = pos[keep], ke[keep]
+        positions.append(pos)
+        kinetic.append(ke)
+        nkept += len(pos)
+        # size the next batch from the observed acceptance
+        batch = int(min(2e6, max(1e5, 2 * (norbits - nkept) * batch / max(len(pos), 1))))
+    pos = np.concatenate(positions)[:norbits]
+    vmax = np.sqrt(2 * np.concatenate(kinetic)[:norbits])
+    # isotropic direction, speed uniform in the velocity ball (p(v) ~ v^2)
+    speed = vmax * rng.uniform(size=norbits) ** (1 / 3)
+    costheta = rng.uniform(-1, 1, size=norbits)
+    sintheta = np.sqrt(1 - costheta**2)
+    phi = rng.uniform(-np.pi, np.pi, size=norbits)
+    vel = speed[:, None] * np.stack([sintheta * np.cos(phi), sintheta * np.sin(phi), costheta], axis=1)
+    ics = np.hstack([pos, vel])
     return to_inertial_velocity(ics, omega) if inertial else ics

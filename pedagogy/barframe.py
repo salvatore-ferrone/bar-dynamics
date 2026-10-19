@@ -71,8 +71,7 @@ def xy_plane_zero_velocity_curve(pot,omega,Ej,nangles=360,nr=2000):
     if Ej > EL1:
         print("warning, Given jacobi energy allows particle to escape the bar")
         return np.full(nangles+1, np.nan), np.full(nangles+1, np.nan)
-    # slightly beyond L1 so the Ej = E_L1 curve is still bracketed along the bar axis
-    r = np.linspace(1e-3, 1.05*xl1, nr)
+    r = np.linspace(1e-3, xl1, nr)
     pos = np.zeros((nangles, nr, 3))
     pos[..., 0] = np.cos(phi)[:, None] * r
     pos[..., 1] = np.sin(phi)[:, None] * r

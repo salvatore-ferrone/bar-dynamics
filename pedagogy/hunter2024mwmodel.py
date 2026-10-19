@@ -4,7 +4,6 @@ This file initializes the agama potential for the Hunter et al 2024 Milky Way po
 '''
 import numpy as np 
 import agama
-agama.setUnits(length=1,mass=1,velocity=1)
 
 coleman_components=dict(\
     alpha = 0.626,
@@ -129,6 +128,7 @@ def portail_component(rho_i, xi, yi, zi, R_in, R_out, cperp, n_in, n_out, n_a):
     return rho
 
 def mw_model():
+    # agama.setUnits(length=1,mass=1,velocity=1)
     bar1=coleman2020(**coleman_components)
     bar2=portail_component(**portail_bar_1)
     bar3=portail_component(**portail_bar_2)    

@@ -7,3 +7,5 @@ book/_build/
 /plots/**/*.png
 .vscode
 /simulations/**/*.h5
+
+*.npy

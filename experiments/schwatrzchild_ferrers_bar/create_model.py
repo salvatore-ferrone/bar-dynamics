@@ -49,7 +49,7 @@ def main():
 
     #### PARAMETERS 
 
-    Nbody = int(1e3)
+    Nbody = int(1e2)
 
     # tuning the orbital library 
     cross_times = 50

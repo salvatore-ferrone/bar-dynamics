@@ -86,10 +86,10 @@ def main():
     omega = omega.to(unitRot).value    
 
     # create the potential model in agama
-    thin_disk   = agama.Potential(**parameters_ext['thin_disk'])
-    thick_disk  = agama.Potential(**parameters_ext['thick_disk'])
-    halo        = agama.Potential(**parameters_ext['halo'])
-    bar         = agama.Potential(**parameters_bar["bar"])
+    thin_disk   = agama.Potential(**parameters_ext_rescaled['thin_disk'])
+    thick_disk  = agama.Potential(**parameters_ext_rescaled['thick_disk'])
+    halo        = agama.Potential(**parameters_ext_rescaled['halo'])
+    bar         = agama.Potential(**parameters_bar_rescaled["bar"])
     potential_external = thin_disk + thick_disk + halo
     potential_total = bar + potential_external 
 

@@ -26,7 +26,7 @@ NPHASE = 6
 
 
 def main(path_file, group=None, overwrite=False, **overrides):
-    hp = {**DEFAULT_HYPERPARAMETERS, **overrides}
+    hp = {**DEFAULT_HYPERPARAMETERS, **overrides} # such elegant syntax
     nbody = hp["Nbody"]
     group = group or "nbody_{:d}".format(nbody)
 

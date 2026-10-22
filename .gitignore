@@ -8,4 +8,4 @@ book/_build/
 .vscode
 /simulations/**/*.h5
 
-*.npy
+*.npy*.h5

@@ -9,3 +9,5 @@ book/_build/
 /simulations/**/*.h5
 *.h5
 *.npy*.h5
+experiments/schwarzschild_sims/**/*.png
+

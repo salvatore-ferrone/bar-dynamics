@@ -1,0 +1,4 @@
+2000 orbits complete (1512 orbits/s)
+/Users/ferrone/repos/bar-dynamics/experiments/schwarzschild_sims/schwarzschild.py:118: RuntimeWarning: divide by zero encountered in divide
+  rel_resid = (mass_model - mass_true) / mass_true
+2000 orbits complete (1733 orbits/s)

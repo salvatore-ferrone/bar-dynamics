@@ -58,7 +58,7 @@ def main(path_file, group=None, overwrite=False, **overrides):
         # softening from the mean inter-particle distance
         p = rescaled["bar"]
         barvolume = numpy.pi * p["scaleRadius"] ** 3 * p["axisRatioY"] * p["axisRatioZ"]
-        eps = hp["softening_frac"] * (barvolume / nbody) ** (1 / 3)
+        eps = hp["softening_frac"] * (4/3)*(barvolume / nbody) ** (1 / 3)
 
         # adjust the time stepping
         T = (hp["integrationtime_Gyr"] * u.Gyr).to(unitT).value

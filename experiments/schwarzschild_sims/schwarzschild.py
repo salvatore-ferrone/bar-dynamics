@@ -1,157 +1,137 @@
-import agama, numpy
-from astropy import units as u 
-from astropy import constants as cnst
-import pathlib
+"""Step 1 of the pipeline: build an equilibrium Schwarzschild model of the bar.
+
+Writes the `/schwarzschild` group of the HDF5 file. It does not sample the DF; that is done by nbody.py.
+"""
 import configparser
+import datetime
+import h5py
+import agama, numpy
+from astropy import units as u
+
+import common
+
+GROUP = "schwarzschild"
+
+DEFAULT_HYPERPARAMETERS = dict(
+    # orbital library
+    cross_times=50,
+    beta=1 / 2,
+    kappa=1 / 10,
+    norbits=int(1e4),
+    seed=0,
+    # density targets
+    nnodes=11,
+    rgridmax=1.2,
+    rgridmin=0.1,
+    stripsPerPane=2,
+    # optimisation
+    sigma_frac=0.1,
+    sigma_floor_frac=0.05,
+    regul=1.0,
+)
 
 
-def load_potential_parameters(*ini_paths):
-	parameters = {}
-	for ini_path in ini_paths:
-		config = configparser.ConfigParser()
-		config.optionxform = str
-		config.read(ini_path)
-		for section in config.sections():
-			if not section.startswith("Potential "):
-				continue
-			name = section.removeprefix("Potential ")
-			parameters[name] = {
-				key: value if key == "type" else float(value)
-				for key, value in config[section].items()
-			}
-	return parameters
+def main(path_out, path_bar, path_ext, overwrite=False, **overrides):
+    hp = {**DEFAULT_HYPERPARAMETERS, **overrides}
+    norbits = hp["norbits"]
 
-def rescale_ini_dict(parameters, unitM, unitL, unitM_OG=u.Msun, unitL_OG=u.kpc):
-    """
-    Expects the ini files to have been parsed with load_potential_parameters
-    """
-    parameters_rescaled = {}
-    for key,value in parameters.items():
-        parameters_rescaled[key] = {}
-        for key_,value_ in value.items():
-            if key_.startswith("mass"):
-                parameters_rescaled[key][key_] = (value_*unitM_OG).to(unitM).value
-            elif key_.startswith("scale"):
-                parameters_rescaled[key][key_] = (value_*unitL_OG).to(unitL).value
-            else:
-                parameters_rescaled[key][key_] = value_    
-    return parameters_rescaled
-
-
-def loadconfigs(path_bar,path_ext):
-    parameters_ext = load_potential_parameters(path_ext)
-    parameters_bar = load_potential_parameters(path_bar)
+    # inputs -> physical-unit parameters, units, pattern speed
+    parameters = {**common.load_potential_parameters(path_ext), **common.load_potential_parameters(path_bar)}
     barconfig = configparser.ConfigParser()
     barconfig.read(path_bar)
-    return parameters_ext, parameters_bar, barconfig
+    units = common.make_units(parameters["bar"]["mass"], parameters["bar"]["scaleRadius"])
+    common.set_agama_units(units)
+    omega_phys = float(barconfig["orientation"]["pattern_speed_kms_kpc"])
+    omega = ((omega_phys * (u.km / u.s) / u.kpc).to(units["unitRot"])).value
+    bar, potential_external, rescaled = common.build_potentials(parameters, units)
+    potential_total = bar + potential_external
 
-def main():
+    with h5py.File(path_out, "a") as f:
+        if GROUP in f:
+            if not overwrite:
+                raise FileExistsError("'{}' already exists in {}; pass overwrite=True".format(GROUP, path_out))
+            del f[GROUP]
+        g = f.create_group(GROUP)
+        g.attrs["success"] = False  # flipped at the very end so partial files are recognisable
+        g.attrs["schema_version"] = common.SCHEMA_VERSION
+        g.attrs["created"] = datetime.datetime.now().isoformat()
+        g.attrs["git_commit"] = common.git_commit()
+        g.attrs["agama_version"] = agama.__version__
+        g.attrs["path_bar"] = str(path_bar)
+        g.attrs["path_ext"] = str(path_ext)
+        g.attrs["omega"] = omega
+        common.write_units(g, units)
+        common.write_attrs(g, hp)
+        common.write_potential(g, parameters, omega_phys,
+                               {"bar_ini": open(path_bar).read(), "ext_ini": open(path_ext).read()})
 
-    #### PARAMETERS 
+        # initial conditions of the orbit library
+        numpy.random.seed(hp["seed"])
+        agama.setRandomSeed(hp["seed"])
+        ics, _ = bar.sample(norbits, potential=potential_total, beta=hp["beta"], kappa=hp["kappa"])
+        times = hp["cross_times"] * potential_total.Tcirc(ics)
 
-    Nbody = int(1e2)
+        # density targets
+        gridr = agama.nonuniformGrid(hp["nnodes"], hp["rgridmin"], hp["rgridmax"])
+        target_density = agama.Target(type="DensityClassicLinear",
+                                      gridr=gridr,
+                                      stripsPerPane=hp["stripsPerPane"],
+                                      axisRatioY=parameters["bar"]["axisRatioY"],
+                                      axisRatioZ=parameters["bar"]["axisRatioZ"])
 
-    # tuning the orbital library 
-    cross_times = 50
-    beta = 1/2
-    kappa = 1/10
-    norbits = int(1e4)
+        # orbital library
+        D, traj = agama.orbit(ic=ics, potential=potential_total, Omega=omega, dtype=object,
+                              time=times, separateTime=True, targets=target_density)
 
-    # tuning the density targets 
-    nnodes          = 11
-    rgridmax        = 1.2 
-    rgridmin        = 0.1
-    stripsPerPane   = 2
+        # solve for the weights
+        total_bar_mass = bar.totalMass()
+        mass_true = target_density(bar)  # right hand side of the inversion
+        sigma = numpy.maximum(hp["sigma_frac"] * mass_true, hp["sigma_floor_frac"] * mass_true.mean())
+        weights = agama.solveOpt(
+            matrix=[numpy.ones((1, norbits)), D.T],
+            rhs=[[total_bar_mass], mass_true],
+            rpenq=[[numpy.inf], 2 * sigma ** -2],
+            xpenq=hp["regul"] * 2 * numpy.ones(norbits) * norbits / total_bar_mass ** 2,
+        )
+        mass_model = D.T.dot(weights)
 
-    fnameout = "ferrers_bar_nbody_{:d}".format(Nbody)
-    virial_tolerence = 1/10
-    path_bar = "/Users/ferrone/repos/bar-dynamics/parameters/components/bar_ferrers_v1.ini"
-    path_ext = "/Users/ferrone/repos/bar-dynamics/parameters/components/mw_fiducial_v1.ini"
+        # save: inputs, library, solution, diagnostics
+        g.attrs["total_bar_mass"] = total_bar_mass
+        g["ics"] = ics
+        g["orbit_times"] = times
+        g["gridr"] = gridr
+        g["matrix_data_density"] = D
+        g["mass_true"] = mass_true
+        g["sigma"] = sigma
+        g["weights"] = weights
+        g["mass_model"] = mass_model
 
-    parameters_ext, parameters_bar, barconfig = loadconfigs(path_bar,path_ext)
+        # ragged orbits stored as concatenated samples + offsets
+        # (each orbit is evaluated at its own recorded time points)
+        orbit_t = [numpy.array([orb[i] for i in range(len(orb))]) for orb in traj]
+        lib = g.create_group("trajectories")
+        lib.create_dataset("data", data=numpy.concatenate([orb(t) for orb, t in zip(traj, orbit_t)]),
+                           compression="gzip")
+        lib.create_dataset("time", data=numpy.concatenate(orbit_t), compression="gzip")
+        lib.create_dataset("offsets", data=numpy.cumsum([0] + [len(t) for t in orbit_t]))
 
-    # rescale the units 
-    oldUnitG    =   (u.km/u.s)**2 * (u.kpc/u.Msun)
-    G           =   cnst.G.to(oldUnitG)
-    unitM   =   parameters_bar["bar"]["mass"]*u.Msun
-    unitL   =   parameters_bar["bar"]["scaleRadius"]*u.kpc
-    unitV   =   (G*unitM/unitL)**(1/2)
-    unitRot =   unitV/unitL
-    agama.setUnits(length=unitL.value, mass=unitM.value, velocity=unitV.value)     
+        rel_resid = (mass_model - mass_true) / mass_true
+        g.attrs["n_nonzero_weights"] = int(numpy.count_nonzero(weights))
+        g.attrs["max_abs_rel_residual"] = float(numpy.max(numpy.abs(rel_resid)))
+        g.attrs["total_mass_model"] = float(weights.sum())
+        g.attrs["success"] = True
 
-    # rescale the parameters 
-    parameters_ext_rescaled = rescale_ini_dict(parameters_ext,unitM=unitM,unitL=unitL)
-    parameters_bar_rescaled = rescale_ini_dict(parameters_bar,unitM=unitM,unitL=unitL)
-    omega = numpy.float64(barconfig["orientation"]["pattern_speed_kms_kpc"]) * (u.km/u.s)/u.kpc
-    omega = omega.to(unitRot).value    
-
-    # create the potential model in agama
-    thin_disk   = agama.Potential(**parameters_ext_rescaled['thin_disk'])
-    thick_disk  = agama.Potential(**parameters_ext_rescaled['thick_disk'])
-    halo        = agama.Potential(**parameters_ext_rescaled['halo'])
-    bar         = agama.Potential(**parameters_bar_rescaled["bar"])
-    potential_external = thin_disk + thick_disk + halo
-    potential_total = bar + potential_external 
-
-    # sample the initial conditions 
-    ics,mass    =   bar.sample(norbits, potential=potential_total, beta=beta,kappa=kappa)   
-
-    # start getting the density targets 
-    gridr           =   agama.nonuniformGrid(nnodes, rgridmin, rgridmax,)
-    target_density  =   agama.Target(type = "DensityClassicLinear",
-                                    gridr = gridr, 
-                                    stripsPerPane = stripsPerPane, 
-                                    axisRatioY=parameters_bar["bar"]['axisRatioY'], 
-                                    axisRatioZ=parameters_bar["bar"]['axisRatioZ'])
-    times           =   cross_times*potential_total.Tcirc(ics)    
-
-    # create the orbital library 
-    D,traj=agama.orbit(ic=ics,
-                    potential=potential_total,
-                    Omega=omega,
-                    dtype=object,
-                    time=times,
-                    separateTime=True, 
-                    targets=target_density) 
+    print("saved", GROUP, "->", path_out)
 
 
-    # set up the schwarzchild model 
-    total_bar_mass = bar.totalMass()
-    w = numpy.ones(norbits) * total_bar_mass / norbits
-    mass_discrete   = D.T.dot(w)
-    mass_true       = target_density(bar) # the right hand side of the inversion     
-
-    # solve the weights
-    data0   = numpy.ones((1, norbits))
-    sigma   = numpy.maximum(0.1*mass_true, 0.05*mass_true.mean())
-    regul   = 1.0 
-    weights = agama.solveOpt(
-        matrix  = [data0, D.T],
-        rhs     = [[total_bar_mass], mass_true],
-        rpenq   = [[numpy.inf], 2*sigma**-2],
-        xpenq   = regul * 2*numpy.ones(norbits)*norbits/total_bar_mass**2 
-    )    
-
-    # sample the initial conditions 
-    snap_posvel, snap_mass = agama.sampleOrbitLibrary(Nbody, traj, weights)    
-
-    # check the virial ratio 
-    # approximate the potential with a multipole expansion 
-    pot_stars_nbody =   agama.Potential(type='multipole', particles=(snap_posvel, snap_mass), symmetry='t')
-    E_kin       =   0.5 * numpy.sum(snap_mass[:,None] * snap_posvel[:,3:6]**2)
-    W_self      =   0.5 * numpy.sum(snap_mass * pot_stars_nbody.potential(snap_posvel[:,0:3]))
-    force_rest  =   potential_external.force(snap_posvel[:,0:3])                      # -∇Φ_rest, shape (N,3)
-    W_ext       =   numpy.sum(snap_mass * numpy.sum(snap_posvel[:,0:3]*force_rest, axis=1))
-    virial_ratio = -2*E_kin / (W_self + W_ext)
-    if numpy.abs(1-virial_ratio) > virial_tolerence: 
-        print("Warning, virial ratio is above 10%. It is {:.3e}".format(virial_ratio))
-
-    # Save the positions and velocities 
-    numpy.save(fnameout+"_phase_space.npy", snap_posvel)
-    numpy.save(fnameout+"_mass.npy", snap_mass)
-
-    print("saved", fnameout)
-    return None 
-
-if __name__=="__main__":
-     main()
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out", default="ferrers_bar.h5")
+    parser.add_argument("--bar", default="/Users/ferrone/repos/bar-dynamics/parameters/components/bar_ferrers_v1.ini")
+    parser.add_argument("--ext", default="/Users/ferrone/repos/bar-dynamics/parameters/components/mw_fiducial_v1.ini")
+    parser.add_argument("--overwrite", action="store_true")
+    for key, value in DEFAULT_HYPERPARAMETERS.items():
+        parser.add_argument("--" + key, type=type(value), default=value)
+    args = vars(parser.parse_args())
+    main(args.pop("out"), args.pop("bar"), args.pop("ext"), args.pop("overwrite"), **args)

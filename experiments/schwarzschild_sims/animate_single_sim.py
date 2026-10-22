@@ -1,7 +1,7 @@
 """Render PNG frames of an nbody group in parallel.
 
 usage: python animate_single_sim.py ferrers_bar.h5 nbody_200 [--stride 10] [--dpi 150]
-then:  ffmpeg -framerate 60 -i ferrers_bar/nbody_200/frame_%06d.png -pix_fmt yuv420p out.mp4
+then:  ffmpeg -framerate 60 -i ferrers_bar/nbody_200/frame_%06d.png -pix_fmt yuv420p out_1.mp4
 """
 import argparse
 import os
@@ -57,13 +57,13 @@ def init_worker(path, group, outdir, background, extent, width, height, dpi, poi
 
     _W.update(traj=g["trajectories"], t=t_myr, fig=fig, scat=scat, txt=txt, outdir=outdir, dpi=dpi)
 
-
-def render(i):
+def render(job):
+    n, i = job
     w = _W
     w["scat"].set_offsets(w["traj"][i, :, 0:2])
-    w["txt"].set_text("{:.0f} Myr".format(w["t"][i]))
-    w["fig"].savefig(w["outdir"] / "frame_{:06d}.png".format(i), dpi=w["dpi"])
-    return i
+    w["txt"].set_text("{:.1f} Myr".format(w["t"][i]))
+    w["fig"].savefig(w["outdir"] / "frame_{:06d}.png".format(n), dpi=w["dpi"])
+    return n
 
 
 def main(path, group, frame_fraction = 1, stride=1, dpi=150, extent=2.0, width=WIDTH, height=HEIGHT, npoints=200, point_size=2, nproc=None):
@@ -73,14 +73,17 @@ def main(path, group, frame_fraction = 1, stride=1, dpi=150, extent=2.0, width=W
 
     with h5py.File(path, "r") as f:
         nframes = f[group]["trajectories"].shape[0]
+    
     indices = range(0, int(nframes//frame_fraction), stride)
+    jobs = list(enumerate(indices))          # (frame_number, sim_index)
+
     nproc = nproc or max(1, os.cpu_count() - 1)
     background = disk_background(path, extent, width/height, npoints)
     
 
     with Pool(nproc, initializer=init_worker,
               initargs=(path, group, outdir, background, extent, width, height, dpi, point_size)) as pool:
-        for n, _ in enumerate(pool.imap_unordered(render, indices, chunksize=8), 1):
+        for n, _ in enumerate(pool.imap_unordered(render, jobs, chunksize=8), 1):
             if n % 100 == 0 or n == len(indices):
                 print("{:d}/{:d}".format(n, len(indices)), flush=True)
     print("frames in", outdir)

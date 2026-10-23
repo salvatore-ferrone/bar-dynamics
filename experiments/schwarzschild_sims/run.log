@@ -2,3 +2,50 @@
 /Users/ferrone/repos/bar-dynamics/experiments/schwarzschild_sims/schwarzschild.py:118: RuntimeWarning: divide by zero encountered in divide
   rel_resid = (mass_model - mass_true) / mass_true
 2000 orbits complete (1733 orbits/s)
+Using a custom optimized KKT solver
+numVariables=2191, numConstraints=192, numConsIneq=2000
+Benchmarking BLAS backends for matrix size=(192,2191): cvxopt=0 s, numpy=0 s, scipy=0.001 s => choosing cvxopt
+     pcost       dcost       gap    pres   dres
+ 0:  1.2402e+01  1.1377e+01  2e+03  5e+01  5e+01
+ 1:  1.2402e+01  1.1388e+01  5e+01  1e+00  1e+00
+ 2:  1.2402e+01  1.1478e+01  3e+01  6e-01  6e-01
+ 3:  1.3032e+01  1.2114e+01  3e+01  5e-01  5e-01
+ 4:  1.3921e+01  1.3979e+01  3e+01  4e-01  4e-01
+ 5:  1.4432e+01  1.4755e+01  2e+01  2e-01  2e-01
+ 6:  1.4971e+01  1.5855e+01  2e+01  2e-01  2e-01
+ 7:  1.5628e+01  1.7188e+01  1e+01  1e-01  1e-01
+ 8:  1.6428e+01  1.8997e+01  1e+01  8e-02  8e-02
+ 9:  1.7525e+01  2.0733e+01  1e+01  6e-02  6e-02
+10:  1.8918e+01  2.2610e+01  1e+01  5e-02  5e-02
+11:  1.9875e+01  2.3912e+01  9e+00  4e-02  4e-02
+12:  2.1301e+01  2.5547e+01  9e+00  3e-02  3e-02
+13:  2.1936e+01  2.6225e+01  9e+00  3e-02  3e-02
+14:  2.3452e+01  2.7651e+01  8e+00  2e-02  2e-02
+15:  2.4880e+01  2.8881e+01  7e+00  1e-02  1e-02
+16:  2.6418e+01  2.9940e+01  7e+00  1e-02  1e-02
+17:  2.8174e+01  3.0869e+01  6e+00  7e-03  7e-03
+18:  2.9120e+01  3.1359e+01  5e+00  6e-03  6e-03
+19:  3.0188e+01  3.2106e+01  4e+00  4e-03  4e-03
+20:  3.0714e+01  3.2480e+01  4e+00  3e-03  3e-03
+21:  3.1234e+01  3.2938e+01  4e+00  3e-03  3e-03
+22:  3.1934e+01  3.3669e+01  4e+00  2e-03  2e-03
+23:  3.2795e+01  3.4475e+01  3e+00  1e-03  1e-03
+24:  3.3421e+01  3.4880e+01  3e+00  1e-03  1e-03
+25:  3.3778e+01  3.5103e+01  3e+00  8e-04  8e-04
+26:  3.4303e+01  3.5366e+01  3e+00  7e-04  7e-04
+27:  3.5246e+01  3.5841e+01  2e+00  3e-04  3e-04
+28:  3.5476e+01  3.5921e+01  2e+00  3e-04  3e-04
+29:  3.5954e+01  3.6003e+01  2e+00  2e-04  2e-04
+30:  3.6395e+01  3.6375e+01  2e-01  2e-05  2e-05
+31:  3.6441e+01  3.6437e+01  2e-02  1e-06  1e-06
+32:  3.6442e+01  3.6442e+01  5e-04  3e-08  3e-08
+33:  3.6442e+01  3.6442e+01  2e-05  6e-10  6e-10
+Optimal solution found.
+saved schwarzschild -> ferrers_bar_10000.h5
+integration time          2.00e+03 Myr
+dt                        1.43e-02 Myr
+sampling                  1.00e-01 Myr
+nsampling                 20000
+nsteps                    140000
+Data volume               4.80e+00 Gbyte
+saved nbody_10000 -> ferrers_bar_10000.h5

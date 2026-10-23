@@ -53,7 +53,7 @@ def init_worker(path, group, outdir, background, extent, width, height, dpi, poi
     ax.text(0.01, 0.99, "N = {:d}".format(g["mass"].shape[0]), va="top", ha="left",
             transform=ax.transAxes, color="white")
     txt = ax.text(0.99, 0.99, "", va="top", ha="right", transform=ax.transAxes, color="white")
-    scat = ax.scatter([], [], s=point_size, color="k")
+    scat = ax.scatter([], [], s=point_size, color="k", alpha=0.1)
 
     _W.update(traj=g["trajectories"], t=t_myr, fig=fig, scat=scat, txt=txt, outdir=outdir, dpi=dpi)
 
@@ -100,6 +100,7 @@ if __name__ == "__main__":
     p.add_argument("--frame_fraction", type=int, default=1)
     p.add_argument("--extent", type=float, default=2.0, help="half-width of the view, code units")
     p.add_argument("--nproc", type=int, default=None)
+    p.add_argument("--point_size", type=int, default=1)
     a = p.parse_args()
     group = a.group
     if group is None:
@@ -108,4 +109,4 @@ if __name__ == "__main__":
         if len(groups) != 1:
             raise SystemExit("choose a group: {}".format(groups))
         group = groups[0]
-    main(a.file, group, frame_fraction=a.frame_fraction, stride=a.stride, dpi=a.dpi, extent=a.extent, nproc=a.nproc, width=a.width, height=a.height )
+    main(a.file, group, frame_fraction=a.frame_fraction, stride=a.stride, dpi=a.dpi, extent=a.extent, nproc=a.nproc, width=a.width, height=a.height, point_size=a.point_size)

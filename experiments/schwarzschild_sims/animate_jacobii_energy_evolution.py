@@ -2,6 +2,7 @@
 
 usage: python animate_jacobii_energy_evolution.py ferrers_bar_10000.h5 nbody_10000
 then:  ffmpeg -framerate 60 -i ferrers_bar_10000/nbody_10000/frame_%06d.png \
+           -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2:color=white" \
            -pix_fmt yuv420p jacobii_energy.mp4
 """
 import argparse

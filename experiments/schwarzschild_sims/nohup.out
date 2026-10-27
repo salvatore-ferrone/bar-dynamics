@@ -742,3 +742,7 @@ animate_single_sim.py: error: unrecognized arguments: --point_size=1
 5000/5001
 5001/5001
 frames in ferrers_bar_10000/nbody_10000
+100/201
+200/201
+201/201
+frames in ferrers_bar_10000/nbody_10000

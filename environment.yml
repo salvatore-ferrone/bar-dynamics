@@ -11,6 +11,8 @@ dependencies:
   - jupyter-book
   - ffmpeg
   - pip
+  - sympy
+  - scikit-image
   - pip:
       - galpy
       - agama

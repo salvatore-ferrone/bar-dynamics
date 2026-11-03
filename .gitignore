@@ -10,4 +10,4 @@ book/_build/
 *.h5
 *.npy*.h5
 experiments/schwarzschild_sims/**/*.png
-
+pedagogy/effective_potential_linearized/disc_anim/*.png

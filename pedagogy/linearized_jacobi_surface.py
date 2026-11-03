@@ -1,19 +1,5 @@
-import numpy, matplotlib.pyplot as plt, agama, os
-from astropy import constants as cnst 
-from astropy import units as u 
+import numpy, agama
 from scipy.optimize import fsolve
-import matplotlib.gridspec as gridspec
-plt.rcParams.update({
-    "font.size": 11,
-    "axes.labelsize": 11,
-    "axes.titlesize": 11,
-    "xtick.labelsize": 11,
-    "ytick.labelsize": 11,
-    "legend.fontsize": 11,
-    "text.usetex": True,
-    "text.latex.preamble": r"\usepackage{txfonts}",
-})
-
 
 # construct the tidal tensor 
 def hessian_galactic_potential(pot, pos):
@@ -46,7 +32,6 @@ def F_total_cluster_frame(pos, Hessian, pot_cluster):
 def get_omega_from_orbit(posvel):
     return numpy.linalg.cross(posvel[0:3],posvel[3:6]) / numpy.linalg.norm(posvel[0:3])**2
 
-
 def get_L1(Hess_eff,pot_cluster):
     eigenvalues, eigenvectors   =   numpy.linalg.eigh(Hess_eff)
     eigenvector                 =   eigenvectors[:, 0]
@@ -60,7 +45,6 @@ def get_L1(Hess_eff,pot_cluster):
     L1 = fsolve(F_total_cluster_frame,rJ_guess,args=(Hess_eff,pot_cluster))
     EL1 =effective_potential_with_effective_tensor(L1,Hess_eff,pot_cluster)
     return L1, EL1
-
 
 def make_vector_field_that_is_aligned_with_the_eigenvectors(Hess_eff,L1,npoints=100):
     "Because, I don't want the surface to extend beyond the jacobi surface"

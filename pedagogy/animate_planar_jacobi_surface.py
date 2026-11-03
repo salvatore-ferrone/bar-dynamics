@@ -2,7 +2,7 @@
  the frames are 1875x1250 px, so the width is odd without the scale filter):
  ffmpeg -framerate 30 -i effective_potential_linearized/disc_anim/frame_%04d.png \
    -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" -c:v libx264 -pix_fmt yuv420p -crf 18 \
-   effective_potential_linearized/jacobi_surface.mp4
+   effective_potential_linearized/jacobi_surface_planar_cluster_orbit.mp4
 """
 import matplotlib
 matplotlib.use("Agg")

@@ -43,6 +43,10 @@ N_GRID = 250
 
 RNG_SEED = 17
 ZVC_BRACKET_MAX = 1e4
+
+# Saving of curated initial conditions from the interactive session.
+SAVE_IC_FILENAME = "meridional_sos_initial_conditions.txt"
+SAVE_IC_HEADER = "# x  y  z  vx  vy  vz"
 # --------------------------------------------------------------------------
 
 
@@ -199,8 +203,11 @@ if __name__ == "__main__":
 	button_clear = Button(fig.add_axes((0.88, 0.965, 0.08, 0.028)), "clear")
 	button_remove_last = Button(fig.add_axes((0.79, 0.965, 0.08, 0.028)), "rm last")
 	button_remove_first = Button(fig.add_axes((0.70, 0.965, 0.08, 0.028)), "rm first")
+	button_remove_second_last = Button(fig.add_axes((0.61, 0.965, 0.08, 0.028)), "rm 2nd")
+	button_save_ics = Button(fig.add_axes((0.52, 0.965, 0.08, 0.028)), "save ICs")
 	status_text = fig.text(0.54, 0.035, "", fontsize=9, ha="left", va="bottom")
 	orbit_artist_stack = []
+	orbit_ic_stack = []
 
 	def remove_orbit_artists(artists):
 		for art in artists:
@@ -209,6 +216,7 @@ if __name__ == "__main__":
 
 	def init_axes(_event=None):
 		orbit_artist_stack.clear()
+		orbit_ic_stack.clear()
 		ax_orbit.cla()
 		ax_sos.cla()
 
@@ -266,6 +274,7 @@ if __name__ == "__main__":
 			return
 
 		remove_orbit_artists(orbit_artist_stack.pop())
+		orbit_ic_stack.pop()
 		status_text.set_text(f"Removed latest orbit. Remaining={len(orbit_artist_stack)}")
 		fig.canvas.draw_idle()
 
@@ -276,7 +285,40 @@ if __name__ == "__main__":
 			return
 
 		remove_orbit_artists(orbit_artist_stack.pop(0))
+		orbit_ic_stack.pop(0)
 		status_text.set_text(f"Removed first orbit. Remaining={len(orbit_artist_stack)}")
+		fig.canvas.draw_idle()
+
+	def remove_second_last_orbit(_event=None):
+		if len(orbit_artist_stack) < 2:
+			status_text.set_text("Need at least two orbits to remove the second-to-last one.")
+			fig.canvas.draw_idle()
+			return
+
+		idx = len(orbit_artist_stack) - 2
+		remove_orbit_artists(orbit_artist_stack.pop(idx))
+		orbit_ic_stack.pop(idx)
+		status_text.set_text(f"Removed second-to-last orbit. Remaining={len(orbit_artist_stack)}")
+		fig.canvas.draw_idle()
+
+	def save_initial_conditions(_event=None):
+		if len(orbit_ic_stack) == 0:
+			status_text.set_text("No initial conditions to save.")
+			fig.canvas.draw_idle()
+			return
+
+		# Orbit seeds are stored as Cartesian phase-space vectors:
+		# [x, y, z, vx, vy, vz].
+		arr = np.array(orbit_ic_stack, dtype=float)
+		np.savetxt(
+			SAVE_IC_FILENAME,
+			arr,
+			fmt="%.16e",
+			header=SAVE_IC_HEADER,
+			comments="",
+		)
+		status_text.set_text(f"Saved {arr.shape[0]} Cartesian initial conditions to {SAVE_IC_FILENAME}")
+		print(f"Saved {arr.shape[0]} Cartesian initial conditions to {SAVE_IC_FILENAME}")
 		fig.canvas.draw_idle()
 
 	def add_orbit_from_seed(R0, pR0):
@@ -294,6 +336,7 @@ if __name__ == "__main__":
 
 		color = rng.uniform(0.15, 0.85, size=3)
 		orbit_artist_stack.append(plot_orbit_artists(ax_orbit, ax_sos, result, color=color))
+		orbit_ic_stack.append(result.ic.copy())
 
 		status_text.set_text(f"Ncross={result.sos_points.shape[0]} | seed=(R,pR)=({R0:.5g},{pR0:.5g})")
 		print(
@@ -314,22 +357,28 @@ if __name__ == "__main__":
 
 	def on_key(event):
 		key = "" if event.key is None else event.key.lower()
-		if key in ("backspace", "u"):
+		if key in ("1",):
 			remove_last_orbit()
-		elif key in ("1",):
+		elif key in ("2",):
+			remove_second_last_orbit()
+		elif key in ("f",):
 			remove_first_orbit()
 		elif key in ("c",):
 			init_axes()
+		elif key in ("s",):
+			save_initial_conditions()
 
 	fig.canvas.mpl_connect("button_press_event", on_click)
 	fig.canvas.mpl_connect("key_press_event", on_key)
 	button_clear.on_clicked(init_axes)
 	button_remove_last.on_clicked(remove_last_orbit)
 	button_remove_first.on_clicked(remove_first_orbit)
+	button_remove_second_last.on_clicked(remove_second_last_orbit)
+	button_save_ics.on_clicked(save_initial_conditions)
 	init_axes()
 
 	print("Interactive meridional SoS explorer ready.")
 	print("Right-click in the right panel (R,p_R) to launch an orbit at fixed (E,Lz).")
-	print("Hotkeys: u/backspace=remove last, 1=remove first, c=clear all.")
+	print("Hotkeys: 1=remove last, 2=remove second-to-last, f=remove first, s=save ICs, c=clear all.")
 	print(f"Using {POTENTIAL_FILENAME}, E={E:.7g}, Lz={Lz:.7g}, E_circ={Ecirc:.7g}, Lzmax={Lzmax:.7g}")
 	plt.show()

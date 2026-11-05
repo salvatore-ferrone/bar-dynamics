@@ -6,6 +6,7 @@ and energy E. Right-click in the SoS panel (R, p_R) to seed an orbit.
 """
 
 from dataclasses import dataclass
+import os
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -18,6 +19,17 @@ import agama
 matplotlib.rc("axes", linewidth=0.6)
 matplotlib.rc("font", size=9)
 
+plt.rcParams.update({
+    "font.size": 11,
+    "axes.labelsize": 11,
+    "axes.titlesize": 11,
+    "xtick.labelsize": 11,
+    "ytick.labelsize": 11,
+    "legend.fontsize": 11,
+    "text.usetex": True,
+    "text.latex.preamble": r"\usepackage{txfonts}",
+})
+
 agama.setUnits(length=1, mass=1, velocity=1)
 
 
@@ -25,14 +37,14 @@ agama.setUnits(length=1, mass=1, velocity=1)
 POTENTIAL_FILENAME = "McMillan17.ini"
 
 # Pick Lz from a fraction of Lzmax at the reference energy shell.
-REFERENCE_RADIUS_FOR_LZMAX = 8.0
-LZ_FRACTION_OF_LZMAX = 0.12
+REFERENCE_RADIUS_FOR_LZMAX = 20.0
+LZ_FRACTION_OF_LZMAX = 0.99
 LZ_OVERRIDE = None
 
 # Energy model:
 # E_circ(Lz) is the lowest energy at fixed Lz; E_escape is taken as 0 by default
 # for this potential normalization. Choose E in-between using ENERGY_FRACTION.
-ENERGY_FRACTION = 0.20
+ENERGY_FRACTION = 0.01
 E_ESCAPE = 0.0
 E_OVERRIDE = None
 
@@ -45,8 +57,9 @@ RNG_SEED = 17
 ZVC_BRACKET_MAX = 1e4
 
 # Saving of curated initial conditions from the interactive session.
-SAVE_IC_FILENAME = "meridional_sos_initial_conditions.txt"
+SAVE_IC_FILENAME = "meridional_sos_initial_conditions_{:.2f}_{:.2f}_{:.2f}.txt".format(REFERENCE_RADIUS_FOR_LZMAX, LZ_FRACTION_OF_LZMAX, ENERGY_FRACTION)
 SAVE_IC_HEADER = "# x  y  z  vx  vy  vz"
+SAVE_FIG_FILENAME = os.path.splitext(SAVE_IC_FILENAME)[0] + ".png"
 # --------------------------------------------------------------------------
 
 
@@ -205,6 +218,7 @@ if __name__ == "__main__":
 	button_remove_first = Button(fig.add_axes((0.70, 0.965, 0.08, 0.028)), "rm first")
 	button_remove_second_last = Button(fig.add_axes((0.61, 0.965, 0.08, 0.028)), "rm 2nd")
 	button_save_ics = Button(fig.add_axes((0.52, 0.965, 0.08, 0.028)), "save ICs")
+	button_save_fig = Button(fig.add_axes((0.43, 0.965, 0.08, 0.028)), "save fig")
 	status_text = fig.text(0.54, 0.035, "", fontsize=9, ha="left", va="bottom")
 	orbit_artist_stack = []
 	orbit_ic_stack = []
@@ -230,7 +244,7 @@ if __name__ == "__main__":
 
 		ax_sos.set_title("Surface of section: z=0, pz>0")
 		ax_sos.set_xlabel("R")
-		ax_sos.set_ylabel("p_R")
+		ax_sos.set_ylabel(r"$p_R$")
 		ax_sos.set_xlim(max(0.0, 0.95 * Rp), 1.05 * Ra)
 		ax_sos.set_ylim(-1.05 * np.max(PRmax), 1.05 * np.max(PRmax))
 
@@ -321,6 +335,12 @@ if __name__ == "__main__":
 		print(f"Saved {arr.shape[0]} Cartesian initial conditions to {SAVE_IC_FILENAME}")
 		fig.canvas.draw_idle()
 
+	def save_figure(_event=None):
+		fig.savefig(SAVE_FIG_FILENAME, dpi=300)
+		status_text.set_text(f"Saved figure to {SAVE_FIG_FILENAME}")
+		print(f"Saved figure to {SAVE_FIG_FILENAME}")
+		fig.canvas.draw_idle()
+
 	def add_orbit_from_seed(R0, pR0):
 		if R0 <= 0.0:
 			status_text.set_text("Invalid seed: R must be positive.")
@@ -375,6 +395,7 @@ if __name__ == "__main__":
 	button_remove_first.on_clicked(remove_first_orbit)
 	button_remove_second_last.on_clicked(remove_second_last_orbit)
 	button_save_ics.on_clicked(save_initial_conditions)
+	button_save_fig.on_clicked(save_figure)
 	init_axes()
 
 	print("Interactive meridional SoS explorer ready.")

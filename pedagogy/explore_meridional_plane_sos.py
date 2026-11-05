@@ -37,14 +37,14 @@ agama.setUnits(length=1, mass=1, velocity=1)
 POTENTIAL_FILENAME = "McMillan17.ini"
 
 # Pick Lz from a fraction of Lzmax at the reference energy shell.
-REFERENCE_RADIUS_FOR_LZMAX = 20.0
+REFERENCE_RADIUS_FOR_LZMAX = 10.0
 LZ_FRACTION_OF_LZMAX = 0.99
 LZ_OVERRIDE = None
 
 # Energy model:
 # E_circ(Lz) is the lowest energy at fixed Lz; E_escape is taken as 0 by default
 # for this potential normalization. Choose E in-between using ENERGY_FRACTION.
-ENERGY_FRACTION = 0.01
+ENERGY_FRACTION = 0.25
 E_ESCAPE = 0.0
 E_OVERRIDE = None
 
